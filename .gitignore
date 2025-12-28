@@ -1,0 +1,15 @@
+# Gradle
+gradle.zip
+.gradle/
+build/
+app/build/
+
+# IDE
+.idea/
+*.iml
+
+# Local config
+local.properties
+
+# OS
+.DS_Store

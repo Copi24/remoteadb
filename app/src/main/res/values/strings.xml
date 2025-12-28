@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Remote ADB</string>
+    <string name="notification_channel_name">Remote ADB Service</string>
+    <string name="notification_channel_description">Shows when ADB tunnel is active</string>
+</resources>
