@@ -14,19 +14,26 @@ class NgrokManager(private val context: Context) {
     
     private var ngrokProcess: Process? = null
     private var tunnelUrl: String? = null
+    private var lastError: String? = null
     
     suspend fun startTunnel(authToken: String, port: Int = 5555): TunnelResult = withContext(Dispatchers.IO) {
         try {
+            lastError = null
+            
             // Extract ngrok binary
             val ngrokFile = ShellExecutor.extractNgrokBinary(context)
             
             // Configure ngrok with auth token
-            val configResult = Runtime.getRuntime().exec(
+            val configProcess = Runtime.getRuntime().exec(
                 arrayOf(ngrokFile.absolutePath, "config", "add-authtoken", authToken)
-            ).waitFor()
+            )
+            val configOutput = configProcess.inputStream.bufferedReader().readText()
+            val configError = configProcess.errorStream.bufferedReader().readText()
+            val configResult = configProcess.waitFor()
             
             if (configResult != 0) {
-                return@withContext TunnelResult.Error("Failed to configure ngrok auth token")
+                val errorMsg = configError.ifEmpty { configOutput }.ifEmpty { "Unknown error" }
+                return@withContext TunnelResult.Error("Failed to configure ngrok: $errorMsg")
             }
             
             // Start ngrok tunnel
@@ -42,11 +49,50 @@ class NgrokManager(private val context: Context) {
             
             ngrokProcess = processBuilder.start()
             
+            // Start a thread to capture ngrok output for error messages
+            val outputReader = ngrokProcess!!.inputStream.bufferedReader()
+            val outputBuilder = StringBuilder()
+            
+            // Read output in background
+            Thread {
+                try {
+                    var line: String?
+                    while (outputReader.readLine().also { line = it } != null) {
+                        outputBuilder.append(line).append("\n")
+                        // Check for error patterns in ngrok output
+                        line?.let { l ->
+                            if (l.contains("err") || l.contains("ERR") || l.contains("error")) {
+                                // Extract error message from JSON log
+                                val errMsgRegex = """"msg"\s*:\s*"([^"]+)"""".toRegex()
+                                val errMatch = errMsgRegex.find(l)
+                                if (errMatch != null) {
+                                    lastError = errMatch.groupValues[1]
+                                }
+                                // Also check for "err" field
+                                val errFieldRegex = """"err"\s*:\s*"([^"]+)"""".toRegex()
+                                val errFieldMatch = errFieldRegex.find(l)
+                                if (errFieldMatch != null) {
+                                    lastError = errFieldMatch.groupValues[1]
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Reader closed
+                }
+            }.start()
+            
             // Wait for tunnel to establish and get URL
             delay(3000) // Give ngrok time to start
             
+            // Check if process died early
+            if (ngrokProcess?.isAlive != true) {
+                val error = lastError ?: outputBuilder.toString().take(200).ifEmpty { "Ngrok process terminated unexpectedly" }
+                return@withContext TunnelResult.Error(error)
+            }
+            
             // Try to get tunnel URL from API
-            repeat(10) {
+            repeat(10) { attempt ->
                 try {
                     val url = URL("http://127.0.0.1:4040/api/tunnels")
                     val connection = url.openConnection() as HttpURLConnection
@@ -64,11 +110,18 @@ class NgrokManager(private val context: Context) {
                         return@withContext TunnelResult.Success(tunnelUrl!!)
                     }
                 } catch (e: Exception) {
+                    // Check if ngrok process is still alive
+                    if (ngrokProcess?.isAlive != true) {
+                        val error = lastError ?: "Ngrok process died unexpectedly"
+                        return@withContext TunnelResult.Error(error)
+                    }
                     delay(1000)
                 }
             }
             
-            TunnelResult.Error("Failed to get tunnel URL")
+            // If we get here, couldn't get tunnel URL
+            val error = lastError ?: "Failed to establish tunnel - check auth token and network"
+            TunnelResult.Error(error)
         } catch (e: Exception) {
             TunnelResult.Error(e.message ?: "Unknown error starting tunnel")
         }
