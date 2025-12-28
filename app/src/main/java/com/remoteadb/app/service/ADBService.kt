@@ -84,9 +84,9 @@ class ADBService : Service() {
             }
             
             // Enable TCP ADB
-            val adbEnabled = ADBManager.enableTcpAdb(port)
-            if (!adbEnabled) {
-                _serviceState.value = ServiceState.Error("Failed to enable ADB over TCP. Root access required.")
+            val adbResult = ADBManager.enableTcpAdb(port)
+            if (!adbResult.success) {
+                _serviceState.value = ServiceState.Error(adbResult.error ?: "Failed to enable ADB over TCP")
                 stopSelf()
                 return@launch
             }

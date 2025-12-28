@@ -6,6 +6,9 @@ plugins {
 android {
     namespace = "com.remoteadb.app"
     compileSdk = 34
+    
+    // Use system aapt2 for ARM64 compatibility
+    buildToolsVersion = "29.0.3"
 
     defaultConfig {
         applicationId = "com.remoteadb.app"
@@ -29,11 +32,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "21"
+        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
