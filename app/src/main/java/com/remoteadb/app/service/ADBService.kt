@@ -14,12 +14,13 @@ import androidx.core.app.NotificationCompat
 import com.remoteadb.app.MainActivity
 import com.remoteadb.app.R
 import com.remoteadb.app.utils.ADBManager
+import com.remoteadb.app.utils.CloudflareManager
 import com.remoteadb.app.utils.NgrokManager
 import com.remoteadb.app.utils.SettingsRepository
+import com.remoteadb.app.utils.TunnelProvider
 import com.remoteadb.app.utils.TunnelResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,7 +33,9 @@ class ADBService : Service() {
     private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var ngrokManager: NgrokManager
+    private lateinit var cloudflareManager: CloudflareManager
     private lateinit var settingsRepository: SettingsRepository
+    private var currentProvider: TunnelProvider = TunnelProvider.CLOUDFLARE
     
     private val _serviceState = MutableStateFlow<ServiceState>(ServiceState.Stopped)
     val serviceState: StateFlow<ServiceState> = _serviceState
@@ -47,6 +50,7 @@ class ADBService : Service() {
     override fun onCreate() {
         super.onCreate()
         ngrokManager = NgrokManager(this)
+        cloudflareManager = CloudflareManager(this)
         settingsRepository = SettingsRepository(this)
         createNotificationChannel()
     }
@@ -65,6 +69,7 @@ class ADBService : Service() {
         super.onDestroy()
         serviceScope.cancel()
         ngrokManager.stopTunnel()
+        cloudflareManager.stopTunnel()
     }
     
     private fun startAdbTunnel() {
@@ -74,16 +79,22 @@ class ADBService : Service() {
             startForeground(NOTIFICATION_ID, createNotification("Starting ADB tunnel..."))
             
             // Get settings
-            val authToken = settingsRepository.ngrokAuthToken.first()
+            val provider = settingsRepository.tunnelProvider.first()
+            currentProvider = provider
             val port = settingsRepository.adbPort.first().toIntOrNull() ?: 5555
             
-            if (authToken.isEmpty()) {
-                _serviceState.value = ServiceState.Error("Ngrok auth token not configured")
-                stopSelf()
-                return@launch
+            // Check provider-specific requirements
+            if (provider == TunnelProvider.NGROK) {
+                val authToken = settingsRepository.ngrokAuthToken.first()
+                if (authToken.isEmpty()) {
+                    _serviceState.value = ServiceState.Error("Ngrok auth token not configured. Go to Settings to add it.")
+                    stopSelf()
+                    return@launch
+                }
             }
             
             // Enable TCP ADB
+            updateNotification("Enabling ADB over TCP...")
             val adbResult = ADBManager.enableTcpAdb(port)
             if (!adbResult.success) {
                 _serviceState.value = ServiceState.Error(adbResult.error ?: "Failed to enable ADB over TCP")
@@ -91,8 +102,23 @@ class ADBService : Service() {
                 return@launch
             }
             
-            // Start ngrok tunnel
-            when (val result = ngrokManager.startTunnel(authToken, port)) {
+            // Small delay to ensure ADB is ready
+            kotlinx.coroutines.delay(1000)
+            
+            // Start tunnel based on provider
+            updateNotification("Starting ${provider.displayName} tunnel...")
+            
+            val result = when (provider) {
+                TunnelProvider.CLOUDFLARE -> {
+                    cloudflareManager.startTunnel(port)
+                }
+                TunnelProvider.NGROK -> {
+                    val authToken = settingsRepository.ngrokAuthToken.first()
+                    ngrokManager.startTunnel(authToken, port)
+                }
+            }
+            
+            when (result) {
                 is TunnelResult.Success -> {
                     _tunnelUrl.value = result.url
                     _serviceState.value = ServiceState.Running(result.url)
@@ -112,7 +138,11 @@ class ADBService : Service() {
         serviceScope.launch {
             _serviceState.value = ServiceState.Stopping
             
-            ngrokManager.stopTunnel()
+            // Stop the appropriate tunnel
+            when (currentProvider) {
+                TunnelProvider.CLOUDFLARE -> cloudflareManager.stopTunnel()
+                TunnelProvider.NGROK -> ngrokManager.stopTunnel()
+            }
             ADBManager.disableTcpAdb()
             
             _tunnelUrl.value = null

@@ -13,7 +13,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -31,6 +30,7 @@ import com.remoteadb.app.utils.ADBManager
 import com.remoteadb.app.utils.DeviceInfo
 import com.remoteadb.app.utils.SettingsRepository
 import com.remoteadb.app.utils.ShellExecutor
+import com.remoteadb.app.utils.TunnelProvider
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -106,6 +106,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     var ngrokAuthToken by remember { mutableStateOf("") }
     var adbPort by remember { mutableStateOf("5555") }
     var autoStartOnBoot by remember { mutableStateOf(false) }
+    var tunnelProvider by remember { mutableStateOf(TunnelProvider.CLOUDFLARE) }
     var deviceInfo by remember { mutableStateOf<DeviceInfo?>(null) }
     var localIp by remember { mutableStateOf<String?>(null) }
     var hasRootAccess by remember { mutableStateOf(false) }
@@ -118,6 +119,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
         ngrokAuthToken = settingsRepository.ngrokAuthToken.first()
         adbPort = settingsRepository.adbPort.first()
         autoStartOnBoot = settingsRepository.autoStartOnBoot.first()
+        tunnelProvider = settingsRepository.tunnelProvider.first()
         tunnelUrl = settingsRepository.lastTunnelUrl.first().takeIf { it.isNotEmpty() }
         
         // Load device info
@@ -135,6 +137,9 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     }
     LaunchedEffect(Unit) {
         settingsRepository.autoStartOnBoot.collect { autoStartOnBoot = it }
+    }
+    LaunchedEffect(Unit) {
+        settingsRepository.tunnelProvider.collect { tunnelProvider = it }
     }
     
     // Determine start destination
@@ -171,6 +176,11 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                         popUpTo("onboarding") { inclusive = true }
                     }
                 },
+                onProviderSelected = { provider ->
+                    scope.launch {
+                        settingsRepository.setTunnelProvider(provider)
+                    }
+                },
                 onTokenSubmit = { token ->
                     scope.launch {
                         settingsRepository.setNgrokAuthToken(token)
@@ -202,13 +212,18 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                         ADBService.startService(context)
                         serviceState = ServiceState.Starting
                         scope.launch {
-                            kotlinx.coroutines.delay(5000)
-                            tunnelUrl = settingsRepository.lastTunnelUrl.first()
-                            if (tunnelUrl?.isNotEmpty() == true) {
-                                serviceState = ServiceState.Running(tunnelUrl!!)
-                            } else {
-                                serviceState = ServiceState.Error("Failed to establish tunnel")
+                            // Poll for tunnel URL
+                            repeat(30) { // Wait up to 30 seconds
+                                kotlinx.coroutines.delay(1000)
+                                val url = settingsRepository.lastTunnelUrl.first()
+                                if (url.isNotEmpty()) {
+                                    tunnelUrl = url
+                                    serviceState = ServiceState.Running(url)
+                                    return@launch
+                                }
                             }
+                            // Timeout
+                            serviceState = ServiceState.Error("Timeout - check logs in notification")
                         }
                     }
                 },
@@ -223,6 +238,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                 ngrokAuthToken = ngrokAuthToken,
                 adbPort = adbPort,
                 autoStartOnBoot = autoStartOnBoot,
+                tunnelProvider = tunnelProvider,
                 onNgrokTokenChange = { token ->
                     scope.launch {
                         settingsRepository.setNgrokAuthToken(token)
@@ -236,6 +252,11 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                 onAutoStartChange = { enabled ->
                     scope.launch {
                         settingsRepository.setAutoStartOnBoot(enabled)
+                    }
+                },
+                onTunnelProviderChange = { provider ->
+                    scope.launch {
+                        settingsRepository.setTunnelProvider(provider)
                     }
                 },
                 onNavigateBack = {

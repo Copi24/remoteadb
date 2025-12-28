@@ -2,6 +2,7 @@ package com.remoteadb.app.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,12 +18,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.remoteadb.app.ui.components.GlowingCard
 import com.remoteadb.app.ui.components.GoldDivider
 import com.remoteadb.app.ui.components.GoldGradientButton
 import com.remoteadb.app.ui.theme.*
+import com.remoteadb.app.utils.CloudflareManager
+import com.remoteadb.app.utils.TunnelProvider
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,12 +35,21 @@ fun SettingsScreen(
     ngrokAuthToken: String,
     adbPort: String,
     autoStartOnBoot: Boolean,
+    tunnelProvider: TunnelProvider,
     onNgrokTokenChange: (String) -> Unit,
     onAdbPortChange: (String) -> Unit,
     onAutoStartChange: (Boolean) -> Unit,
+    onTunnelProviderChange: (TunnelProvider) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+    var downloadSuccess by remember { mutableStateOf(false) }
     
     Box(
         modifier = Modifier
@@ -76,58 +90,205 @@ fun SettingsScreen(
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Ngrok Configuration
-                SettingsSection(title = "Ngrok Configuration") {
-                    var tokenVisible by remember { mutableStateOf(false) }
-                    var editingToken by remember { mutableStateOf(ngrokAuthToken) }
-                    
-                    OutlinedTextField(
-                        value = editingToken,
-                        onValueChange = { editingToken = it },
-                        label = { Text("Auth Token") },
-                        placeholder = { Text("Enter your Ngrok auth token") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GoldPrimary,
-                            unfocusedBorderColor = GoldDark.copy(alpha = 0.5f),
-                            cursorColor = GoldPrimary,
-                            focusedLabelColor = GoldPrimary
-                        ),
-                        trailingIcon = {
-                            IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                                Icon(
-                                    imageVector = if (tokenVisible) Icons.Default.VisibilityOff 
-                                        else Icons.Default.Visibility,
-                                    contentDescription = "Toggle visibility",
-                                    tint = GoldDark
+                // Tunnel Provider Selection
+                SettingsSection(title = "Tunnel Provider") {
+                    TunnelProvider.values().forEach { provider ->
+                        val isSelected = tunnelProvider == provider
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.border(2.dp, GoldPrimary, RoundedCornerShape(12.dp))
+                                    } else {
+                                        Modifier
+                                    }
+                                )
+                                .clickable { onTunnelProviderChange(provider) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) DarkCard else DarkSurfaceVariant
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { onTunnelProviderChange(provider) },
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = GoldPrimary,
+                                        unselectedColor = TextMuted
+                                    )
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = provider.displayName,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = if (isSelected) GoldPrimary else TextPrimary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = provider.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextMuted
+                                    )
+                                }
+                            }
+                        }
+                        if (provider != TunnelProvider.values().last()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+                
+                // Cloudflare Configuration (if selected)
+                AnimatedVisibility(
+                    visible = tunnelProvider == TunnelProvider.CLOUDFLARE,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    SettingsSection(title = "Cloudflare Setup") {
+                        Text(
+                            text = "Cloudflare tunnels are FREE and require no account!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = StatusActive
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        if (isDownloading) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = downloadProgress / 100f,
+                                    color = GoldPrimary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = "Downloading... $downloadProgress%",
+                                    color = TextSecondary
                                 )
                             }
-                        },
-                        singleLine = true,
-                        visualTransformation = if (tokenVisible) 
-                            androidx.compose.ui.text.input.VisualTransformation.None 
-                        else 
-                            androidx.compose.ui.text.input.PasswordVisualTransformation()
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    GoldGradientButton(
-                        text = "Save Token",
-                        onClick = { onNgrokTokenChange(editingToken) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = editingToken.isNotBlank() && editingToken != ngrokAuthToken,
-                        icon = Icons.Default.Save
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Text(
-                        text = "Get your free token at ngrok.com",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextMuted
-                    )
+                        } else {
+                            downloadError?.let { error ->
+                                Text(
+                                    text = error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = StatusInactive
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                            
+                            if (downloadSuccess) {
+                                Text(
+                                    text = "✓ Cloudflared is ready!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = StatusActive
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            GoldGradientButton(
+                                text = if (downloadSuccess) "Re-download" else "Download Cloudflared",
+                                onClick = {
+                                    scope.launch {
+                                        isDownloading = true
+                                        downloadError = null
+                                        downloadSuccess = false
+                                        val success = CloudflareManager.downloadCloudflared(context) { progress ->
+                                            downloadProgress = progress
+                                        }
+                                        isDownloading = false
+                                        if (success) {
+                                            downloadSuccess = true
+                                        } else {
+                                            downloadError = "Download failed. Check internet connection."
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                icon = Icons.Default.CloudDownload
+                            )
+                        }
+                    }
+                }
+                
+                // Ngrok Configuration (if selected)
+                AnimatedVisibility(
+                    visible = tunnelProvider == TunnelProvider.NGROK,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    SettingsSection(title = "Ngrok Configuration") {
+                        var tokenVisible by remember { mutableStateOf(false) }
+                        var editingToken by remember { mutableStateOf(ngrokAuthToken) }
+                        
+                        OutlinedTextField(
+                            value = editingToken,
+                            onValueChange = { editingToken = it },
+                            label = { Text("Auth Token") },
+                            placeholder = { Text("Enter your Ngrok auth token") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldPrimary,
+                                unfocusedBorderColor = GoldDark.copy(alpha = 0.5f),
+                                cursorColor = GoldPrimary,
+                                focusedLabelColor = GoldPrimary
+                            ),
+                            trailingIcon = {
+                                IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                                    Icon(
+                                        imageVector = if (tokenVisible) Icons.Default.VisibilityOff 
+                                            else Icons.Default.Visibility,
+                                        contentDescription = "Toggle visibility",
+                                        tint = GoldDark
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                            visualTransformation = if (tokenVisible) 
+                                androidx.compose.ui.text.input.VisualTransformation.None 
+                            else 
+                                androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        GoldGradientButton(
+                            text = "Save Token",
+                            onClick = { onNgrokTokenChange(editingToken) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = editingToken.isNotBlank() && editingToken != ngrokAuthToken,
+                            icon = Icons.Default.Save
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "Get your free token at ngrok.com",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "⚠️ Note: Free ngrok may have limited TCP tunnels",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = StatusPending
+                        )
+                    }
                 }
                 
                 // ADB Configuration
@@ -188,7 +349,15 @@ fun SettingsScreen(
                     SettingsInfoItem(
                         icon = Icons.Outlined.Info,
                         title = "Version",
-                        value = "1.0.0"
+                        value = "1.1.0"
+                    )
+                    
+                    GoldDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    
+                    SettingsInfoItem(
+                        icon = Icons.Outlined.Cloud,
+                        title = "Active Provider",
+                        value = tunnelProvider.displayName
                     )
                     
                     GoldDivider(modifier = Modifier.padding(vertical = 12.dp))
@@ -197,14 +366,6 @@ fun SettingsScreen(
                         icon = Icons.Outlined.Code,
                         title = "Open Source",
                         value = "MIT License"
-                    )
-                    
-                    GoldDivider(modifier = Modifier.padding(vertical = 12.dp))
-                    
-                    SettingsInfoItem(
-                        icon = Icons.Outlined.BugReport,
-                        title = "Built with",
-                        value = "Kotlin + Jetpack Compose"
                     )
                 }
                 
