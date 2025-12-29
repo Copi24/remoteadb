@@ -1,0 +1,70 @@
+name: Deploy Cloudflare Worker
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - "cloudflare-worker/**"
+      - ".github/workflows/deploy-cloudflare-worker.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Deploy worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          workingDirectory: cloudflare-worker
+          command: deploy worker.js --name remoteadb-provision --compatibility-date 2025-12-29
+
+      - name: Set Worker secrets
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          set -euo pipefail
+          npm install -g wrangler@3
+          cd cloudflare-worker
+          printf %s "${CF_API_TOKEN}" | wrangler secret put CF_API_TOKEN --name remoteadb-provision
+          printf %s "${CF_ACCOUNT_ID}" | wrangler secret put CF_ACCOUNT_ID --name remoteadb-provision
+          printf %s "${CF_ZONE_ID}" | wrangler secret put CF_ZONE_ID --name remoteadb-provision
+          printf %s "adb.676967.xyz" | wrangler secret put CF_DNS_SUFFIX --name remoteadb-provision
+
+      - name: Ensure Worker route
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          script="remoteadb-provision"
+          pattern="api.676967.xyz/provision*"
+
+          routes_json=$(curl -fsS -H "Authorization: Bearer ${CF_API_TOKEN}" "${api}/zones/${CF_ZONE_ID}/workers/routes")
+          existing_id=$(echo "$routes_json" | jq -r ".result[] | select(.pattern==\"${pattern}\") | .id" | head -n1)
+
+          if [ -z "${existing_id}" ] || [ "${existing_id}" = "null" ]; then
+            curl -fsS -X POST -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+              -d "{\"pattern\":\"${pattern}\",\"script\":\"${script}\"}" \
+              "${api}/zones/${CF_ZONE_ID}/workers/routes" >/dev/null
+            echo "Created route ${pattern} -> ${script}"
+          else
+            curl -fsS -X PUT -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+              -d "{\"pattern\":\"${pattern}\",\"script\":\"${script}\"}" \
+              "${api}/zones/${CF_ZONE_ID}/workers/routes/${existing_id}" >/dev/null
+            echo "Updated route ${pattern} -> ${script}"
+          fi
