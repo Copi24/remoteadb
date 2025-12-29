@@ -31,7 +31,7 @@ jobs:
       run: chmod +x gradlew
     
     - name: Build Debug APK
-      run: ./gradlew assembleDebug -PbuildToolsVersion=34.0.0
+      run: ./gradlew assembleDebug
     
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
@@ -41,7 +41,7 @@ jobs:
         retention-days: 30
     
     - name: Build Release APK (unsigned)
-      run: ./gradlew assembleRelease -PbuildToolsVersion=34.0.0
+      run: ./gradlew assembleRelease
     
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
