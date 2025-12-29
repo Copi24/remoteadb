@@ -67,6 +67,18 @@ dependencies {
     implementation("com.google.accompanist:accompanist-pager:0.32.0")
     implementation("com.google.accompanist:accompanist-pager-indicators:0.32.0")
     
+    // Shizuku for non-root ADB access
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
+    
+    // OkHttp for WebSocket server
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    
+    // Ktor for embedded server
+    implementation("io.ktor:ktor-server-core:2.3.7")
+    implementation("io.ktor:ktor-server-netty:2.3.7")
+    implementation("io.ktor:ktor-server-websockets:2.3.7")
+    
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

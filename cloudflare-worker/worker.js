@@ -71,6 +71,14 @@ export default {
       });
     }
 
+    // Python client for Shizuku mode
+    if (path === "/radb" || path === "/radb.py") {
+      const pyScript = await fetch("https://raw.githubusercontent.com/Copi24/remoteadb/main/pc-client/radb.py");
+      return new Response(await pyScript.text(), {
+        headers: { "Content-Type": "text/plain; charset=utf-8" }
+      });
+    }
+
     // Provision endpoint
     if (path === "/provision") {
       if (request.method !== "POST") {
@@ -83,14 +91,18 @@ export default {
     if (path === "/" || path === "") {
       return new Response(`Remote ADB Connect
 
+=== ROOT MODE (full ADB) ===
 Linux/macOS:
   curl -sL 676967.xyz/c | bash -s YOUR_DEVICE_ID
 
 Windows:
   curl -sLO 676967.xyz/connect.bat && connect.bat YOUR_DEVICE_ID
 
-Then in another terminal:
-  adb connect localhost:5555
+Then: adb connect localhost:5555
+
+=== SHIZUKU MODE (non-root) ===
+curl -sLO 676967.xyz/radb.py
+python radb.py YOUR_DEVICE_ID shell
 
 Get the app: https://github.com/Copi24/remoteadb/releases
 `, { headers: { "Content-Type": "text/plain" }});
