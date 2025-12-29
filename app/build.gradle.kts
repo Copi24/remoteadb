@@ -7,8 +7,12 @@ android {
     namespace = "com.remoteadb.app"
     compileSdk = 34
     
-    // Use system aapt2 for ARM64 compatibility
-    buildToolsVersion = "29.0.3"
+    // Use gradle property if provided, else fall back to 29.0.3 for ARM64
+    buildToolsVersion = if (project.hasProperty("buildToolsVersion")) {
+        project.property("buildToolsVersion") as String
+    } else {
+        "29.0.3"
+    }
 
     defaultConfig {
         applicationId = "com.remoteadb.app"
