@@ -27,22 +27,24 @@ The app enables **ADB over TCP** (root required). You provide the network path u
 - VPN: Tailscale / ZeroTier / WireGuard
 - SSH reverse tunnel
 
-### Option 2: Cloudflare (Managed, your domain)
+### Option 2: Cloudflare (Managed, default)
 
-This mode is designed for **many devices/users under your domain** using a per-device hostname like:
-`<deviceId>.adb.<your-domain>`.
+This is the default mode and uses the shared domain **676967.xyz** with a per-device hostname:
+`<deviceId>.adb.676967.xyz`
 
-How it works:
-1) You deploy a small provisioning endpoint (see `cloudflare-worker/worker.js`) that creates a tunnel + DNS + returns a **run token**.
-2) The app calls that API and shows the command to run on-device:
-   ```bash
-   cloudflared tunnel run --token <token>
-   ```
-3) On your PC, connect via Access TCP:
-   ```bash
-   cloudflared access tcp --hostname <deviceId>.adb.<your-domain> --url 127.0.0.1:15555
-   adb connect 127.0.0.1:15555
-   ```
+User experience:
+- Install app → tap Connect
+- Run the shown command in Termux (or later: in-app runner):
+  ```bash
+  cloudflared tunnel run --token <token>
+  ```
+- On PC:
+  ```bash
+  cloudflared access tcp --hostname <deviceId>.adb.676967.xyz --url 127.0.0.1:15555
+  adb connect 127.0.0.1:15555
+  ```
+
+Admin setup (one-time): provision API at `https://api.676967.xyz/provision` (see `cloudflare-worker/worker.js`).
 
 ### Option 3: Ngrok
 

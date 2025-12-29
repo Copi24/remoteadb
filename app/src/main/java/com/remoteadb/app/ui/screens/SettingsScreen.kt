@@ -39,8 +39,6 @@ fun SettingsScreen(
     managedCfBaseDomain: String,
     managedCfApiUrl: String,
     onNgrokTokenChange: (String) -> Unit,
-    onManagedCfBaseDomainChange: (String) -> Unit,
-    onManagedCfApiUrlChange: (String) -> Unit,
     onAdbPortChange: (String) -> Unit,
     onAutoStartChange: (Boolean) -> Unit,
     onTunnelProviderChange: (TunnelProvider) -> Unit,
@@ -96,7 +94,7 @@ fun SettingsScreen(
             ) {
                 // Tunnel Provider Selection
                 SettingsSection(title = "Tunnel Provider") {
-                    TunnelProvider.values().forEach { provider ->
+                    listOf(TunnelProvider.CLOUDFLARE_MANAGED, TunnelProvider.MANUAL).forEach { provider ->
                         val isSelected = tunnelProvider == provider
                         Card(
                             modifier = Modifier
@@ -144,7 +142,7 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                        if (provider != TunnelProvider.values().last()) {
+                        if (provider != TunnelProvider.MANUAL) {
                             Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
@@ -165,26 +163,18 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        OutlinedTextField(
-                            value = managedCfBaseDomain,
-                            onValueChange = onManagedCfBaseDomainChange,
-                            label = { Text("Base Domain") },
-                            placeholder = { Text("034210.xyz") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            singleLine = true
+                        InfoRow(
+                            icon = Icons.Outlined.Domain,
+                            label = "Base Domain",
+                            value = managedCfBaseDomain
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        OutlinedTextField(
-                            value = managedCfApiUrl,
-                            onValueChange = onManagedCfApiUrlChange,
-                            label = { Text("Provisioning API URL") },
-                            placeholder = { Text("https://api.034210.xyz/provision") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            singleLine = true
+                        InfoRow(
+                            icon = Icons.Outlined.Cloud,
+                            label = "Provisioning API",
+                            value = managedCfApiUrl
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))

@@ -106,7 +106,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     var ngrokAuthToken by remember { mutableStateOf("") }
     var adbPort by remember { mutableStateOf("5555") }
     var autoStartOnBoot by remember { mutableStateOf(false) }
-    var tunnelProvider by remember { mutableStateOf(TunnelProvider.MANUAL) }
+    var tunnelProvider by remember { mutableStateOf(TunnelProvider.CLOUDFLARE_MANAGED) }
     var managedCfBaseDomain by remember { mutableStateOf("") }
     var managedCfApiUrl by remember { mutableStateOf("") }
     var managedCfHostname by remember { mutableStateOf("") }
@@ -271,12 +271,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                         settingsRepository.setNgrokAuthToken(token)
                     }
                 },
-                onManagedCfBaseDomainChange = { domain ->
-                    scope.launch { settingsRepository.setManagedCfBaseDomain(domain) }
-                },
-                onManagedCfApiUrlChange = { url ->
-                    scope.launch { settingsRepository.setManagedCfApiUrl(url) }
-                },
+
                 onAdbPortChange = { port ->
                     scope.launch {
                         settingsRepository.setAdbPort(port)

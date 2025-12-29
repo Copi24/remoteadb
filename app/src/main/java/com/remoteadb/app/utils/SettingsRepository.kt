@@ -14,6 +14,9 @@ import java.util.UUID
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "remote_adb_settings")
 
+private const val DEFAULT_MANAGED_CF_BASE_DOMAIN = "676967.xyz"
+private const val DEFAULT_MANAGED_CF_API_URL = "https://api.676967.xyz/provision"
+
 enum class TunnelProvider(val displayName: String, val description: String) {
     MANUAL("Manual", "Use Termux/VPN/SSH (recommended)"),
     CLOUDFLARE_MANAGED("Cloudflare (Managed)", "Your domain + per-device hostname"),
@@ -69,7 +72,7 @@ class SettingsRepository(private val context: Context) {
     
     val tunnelProvider: Flow<TunnelProvider> = context.dataStore.data
         .map { preferences ->
-            val providerName = preferences[PreferencesKeys.TUNNEL_PROVIDER] ?: TunnelProvider.MANUAL.name
+            val providerName = preferences[PreferencesKeys.TUNNEL_PROVIDER] ?: TunnelProvider.CLOUDFLARE_MANAGED.name
             try {
                 TunnelProvider.valueOf(providerName)
             } catch (e: Exception) {
@@ -79,12 +82,16 @@ class SettingsRepository(private val context: Context) {
     
     val managedCfBaseDomain: Flow<String> = context.dataStore.data
         .map { preferences ->
-            preferences[PreferencesKeys.MANAGED_CF_BASE_DOMAIN] ?: ""
+            preferences[PreferencesKeys.MANAGED_CF_BASE_DOMAIN]
+                ?.takeIf { it.isNotBlank() }
+                ?: DEFAULT_MANAGED_CF_BASE_DOMAIN
         }
 
     val managedCfApiUrl: Flow<String> = context.dataStore.data
         .map { preferences ->
-            preferences[PreferencesKeys.MANAGED_CF_API_URL] ?: ""
+            preferences[PreferencesKeys.MANAGED_CF_API_URL]
+                ?.takeIf { it.isNotBlank() }
+                ?: DEFAULT_MANAGED_CF_API_URL
         }
 
     val managedCfHostname: Flow<String> = context.dataStore.data

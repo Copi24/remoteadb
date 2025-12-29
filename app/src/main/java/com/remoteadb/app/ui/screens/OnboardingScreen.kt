@@ -249,64 +249,41 @@ private fun ProviderSelectionPage(
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        // Manual option
-        ProviderCard(
-            provider = TunnelProvider.MANUAL,
-            isSelected = selectedProvider == TunnelProvider.MANUAL,
-            onClick = { onProviderSelected(TunnelProvider.MANUAL) },
-            benefits = listOf(
-                "✓ Most reliable on Android",
-                "✓ Use Termux/VPN/SSH",
-                "✓ No built-in binary downloads",
-                "✓ Works with Tailscale/ZeroTier/etc"
-            )
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
         // Cloudflare (Managed) option
         ProviderCard(
             provider = TunnelProvider.CLOUDFLARE_MANAGED,
             isSelected = selectedProvider == TunnelProvider.CLOUDFLARE_MANAGED,
             onClick = { onProviderSelected(TunnelProvider.CLOUDFLARE_MANAGED) },
             benefits = listOf(
-                "✓ Your domain",
+                "✓ Uses 676967.xyz",
                 "✓ One hostname per device",
                 "✓ Secure via Cloudflare Access",
-                "✓ Requires your Worker/API"
+                "✓ No setup required"
             )
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Cloudflare option
+        // Manual option (advanced)
         ProviderCard(
-            provider = TunnelProvider.CLOUDFLARE,
-            isSelected = selectedProvider == TunnelProvider.CLOUDFLARE,
-            onClick = { onProviderSelected(TunnelProvider.CLOUDFLARE) },
+            provider = TunnelProvider.MANUAL,
+            isSelected = selectedProvider == TunnelProvider.MANUAL,
+            onClick = { onProviderSelected(TunnelProvider.MANUAL) },
             benefits = listOf(
-                "• Experimental",
-                "• ADB is TCP (may not work)",
-                "• Output may just hang",
-                "• Use Manual if it fails"
+                "• Advanced / fallback",
+                "• Use Termux/VPN/SSH",
+                "• For custom networking"
             )
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Ngrok option
-        ProviderCard(
-            provider = TunnelProvider.NGROK,
-            isSelected = selectedProvider == TunnelProvider.NGROK,
-            onClick = { onProviderSelected(TunnelProvider.NGROK) },
-            benefits = listOf(
-                "✓ Easy setup",
-                "✓ Requires account",
-                "⚠ TCP often requires paid plan",
-                "✓ Good logs"
-            )
+        Text(
+            text = "Default: Cloudflare (Managed)",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextMuted,
+            textAlign = TextAlign.Center
         )
-
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
