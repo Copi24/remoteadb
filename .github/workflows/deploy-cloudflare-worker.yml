@@ -36,13 +36,12 @@ jobs:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
         run: |
-          set -euo pipefail
           npm install -g wrangler@3
           cd cloudflare-worker
-          printf %s "${CF_API_TOKEN}" | wrangler secret put CF_API_TOKEN --name remoteadb-provision
-          printf %s "${CF_ACCOUNT_ID}" | wrangler secret put CF_ACCOUNT_ID --name remoteadb-provision
-          printf %s "${CF_ZONE_ID}" | wrangler secret put CF_ZONE_ID --name remoteadb-provision
-          printf %s "676967.xyz" | wrangler secret put CF_DNS_SUFFIX --name remoteadb-provision
+          printf %s "${CF_API_TOKEN}" | wrangler secret put CF_API_TOKEN --name remoteadb-provision || true
+          printf %s "${CF_ACCOUNT_ID}" | wrangler secret put CF_ACCOUNT_ID --name remoteadb-provision || true
+          printf %s "${CF_ZONE_ID}" | wrangler secret put CF_ZONE_ID --name remoteadb-provision || true
+          printf %s "676967.xyz" | wrangler secret put CF_DNS_SUFFIX --name remoteadb-provision || true
 
       - name: Ensure Worker route
         env:
