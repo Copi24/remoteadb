@@ -106,9 +106,16 @@ class ADBService : Service() {
             kotlinx.coroutines.delay(1000)
             
             // Start tunnel based on provider
-            updateNotification("Starting ${provider.displayName} tunnel...")
+            updateNotification(
+                if (provider == TunnelProvider.MANUAL) "ADB over TCP enabled (manual mode)..." else "Starting ${provider.displayName} tunnel..."
+            )
             
             val result = when (provider) {
+                TunnelProvider.MANUAL -> {
+                    val ip = runCatching { ADBManager.getLocalIpAddress() }.getOrNull().orEmpty()
+                    val url = if (ip.isNotBlank()) "tcp://$ip:$port" else "tcp://<device-ip>:$port"
+                    TunnelResult.Success(url)
+                }
                 TunnelProvider.CLOUDFLARE -> {
                     cloudflareManager.startTunnel(port)
                 }
@@ -127,6 +134,7 @@ class ADBService : Service() {
                 }
                 is TunnelResult.Error -> {
                     _serviceState.value = ServiceState.Error(result.message)
+                    updateNotification("Error: ${result.message.lineSequence().firstOrNull().orEmpty()}")
                     ADBManager.disableTcpAdb()
                     stopSelf()
                 }
@@ -140,6 +148,7 @@ class ADBService : Service() {
             
             // Stop the appropriate tunnel
             when (currentProvider) {
+                TunnelProvider.MANUAL -> Unit
                 TunnelProvider.CLOUDFLARE -> cloudflareManager.stopTunnel()
                 TunnelProvider.NGROK -> ngrokManager.stopTunnel()
             }

@@ -70,7 +70,7 @@ fun OnboardingScreen(
         )
     )
     
-    var selectedProvider by remember { mutableStateOf(TunnelProvider.CLOUDFLARE) }
+    var selectedProvider by remember { mutableStateOf(TunnelProvider.MANUAL) }
     var authToken by remember { mutableStateOf("") }
     var showSetupScreen by remember { mutableStateOf(false) }
     var isDownloading by remember { mutableStateOf(false) }
@@ -249,38 +249,53 @@ private fun ProviderSelectionPage(
         
         Spacer(modifier = Modifier.height(32.dp))
         
+        // Manual option
+        ProviderCard(
+            provider = TunnelProvider.MANUAL,
+            isSelected = selectedProvider == TunnelProvider.MANUAL,
+            onClick = { onProviderSelected(TunnelProvider.MANUAL) },
+            benefits = listOf(
+                "✓ Most reliable on Android",
+                "✓ Use Termux/VPN/SSH",
+                "✓ No built-in binary downloads",
+                "✓ Works with Tailscale/ZeroTier/etc"
+            )
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Cloudflare option
         ProviderCard(
             provider = TunnelProvider.CLOUDFLARE,
             isSelected = selectedProvider == TunnelProvider.CLOUDFLARE,
             onClick = { onProviderSelected(TunnelProvider.CLOUDFLARE) },
             benefits = listOf(
-                "✓ 100% FREE",
-                "✓ No account needed",
-                "✓ No signup required",
-                "✓ Unlimited usage"
+                "• Experimental",
+                "• ADB is TCP (may not work)",
+                "• Output may just hang",
+                "• Use Manual if it fails"
             )
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Ngrok option
         ProviderCard(
             provider = TunnelProvider.NGROK,
             isSelected = selectedProvider == TunnelProvider.NGROK,
             onClick = { onProviderSelected(TunnelProvider.NGROK) },
             benefits = listOf(
-                "✓ Free tier available",
-                "✓ Requires free account",
-                "✓ Static URLs (paid)",
-                "✓ Dashboard & logs"
+                "✓ Easy setup",
+                "✓ Requires account",
+                "⚠ TCP often requires paid plan",
+                "✓ Good logs"
             )
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Text(
-            text = "Recommended: Cloudflare (easiest setup)",
+            text = "Recommended: Manual (most reliable)",
             style = MaterialTheme.typography.bodySmall,
             color = TextMuted,
             textAlign = TextAlign.Center
@@ -375,7 +390,11 @@ private fun SetupScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
-            imageVector = if (provider == TunnelProvider.CLOUDFLARE) Icons.Default.CloudDownload else Icons.Default.Key,
+            imageVector = when (provider) {
+                TunnelProvider.CLOUDFLARE -> Icons.Default.Cloud
+                TunnelProvider.NGROK -> Icons.Default.Key
+                TunnelProvider.MANUAL -> Icons.Default.SettingsEthernet
+            },
             contentDescription = null,
             modifier = Modifier.size(80.dp),
             tint = GoldPrimary
@@ -384,7 +403,11 @@ private fun SetupScreen(
         Spacer(modifier = Modifier.height(24.dp))
         
         Text(
-            text = if (provider == TunnelProvider.CLOUDFLARE) "Setup Cloudflare" else "Setup Ngrok",
+            text = when (provider) {
+                TunnelProvider.CLOUDFLARE -> "Setup Cloudflare"
+                TunnelProvider.NGROK -> "Setup Ngrok"
+                TunnelProvider.MANUAL -> "Manual Setup"
+            }, 
             style = MaterialTheme.typography.headlineMedium,
             color = GoldPrimary,
             fontWeight = FontWeight.Bold
@@ -429,56 +452,32 @@ private fun SetupScreen(
             Spacer(modifier = Modifier.height(24.dp))
             
             Text(
-                text = "We need to download the cloudflared binary (~25MB). This is a one-time download.",
+                text = "Heads up: ADB is raw TCP, but Cloudflare ‘quick tunnels’ are mainly meant for HTTP and may not provide a working TCP endpoint.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
                 textAlign = TextAlign.Center
             )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            if (isDownloading) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator(
-                        progress = downloadProgress / 100f,
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkCard)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Recommended: use Manual mode",
+                        style = MaterialTheme.typography.titleSmall,
                         color = GoldPrimary,
-                        modifier = Modifier.size(64.dp)
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Downloading... $downloadProgress%",
-                        color = TextSecondary
-                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("1) Start Remote ADB (enables ADB over TCP)", color = TextSecondary)
+                    Text("2) In Termux/PC, run your tunnel/VPN (Tailscale, ZeroTier, SSH reverse tunnel, etc.)", color = TextSecondary)
+                    Text("3) Connect from your PC using the public endpoint", color = TextSecondary)
                 }
-            } else {
-                downloadError?.let { error ->
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = StatusInactive,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-                
-                GoldGradientButton(
-                    text = "Download Cloudflared",
-                    onClick = onDownloadCloudflared,
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Default.CloudDownload
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(
-                    text = "Or skip if already downloaded",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMuted
-                )
             }
-        } else {
+        } else if (provider == TunnelProvider.NGROK) {
             // Ngrok setup
             Text(
                 text = "Enter your Ngrok auth token to get started.",
@@ -552,6 +551,34 @@ private fun SetupScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
+                }
+            }
+        } else {
+            // Manual setup
+            Text(
+                text = "Manual mode doesn't run a tunnel inside the app.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkCard)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Steps",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = GoldPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("1) Tap Get Started (enables ADB over TCP)", color = TextSecondary)
+                    Text("2) Run your tunnel/VPN externally (Termux/PC)", color = TextSecondary)
+                    Text("3) If on the same Wi‑Fi: adb connect <device-ip>:5555", color = TextSecondary)
                 }
             }
         }

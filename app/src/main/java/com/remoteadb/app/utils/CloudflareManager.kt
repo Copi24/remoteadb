@@ -41,7 +41,7 @@ class CloudflareManager(private val context: Context) {
             val cloudflaredFile = getCloudflaredBinary()
             if (cloudflaredFile == null || !cloudflaredFile.exists()) {
                 return@withContext TunnelResult.Error(
-                    "Cloudflared binary not found.\n\nPlease go to Settings and download it first, or restart the app to complete setup."
+                    "Cloudflared is not available.\n\nTip: For ADB (TCP), prefer Manual mode and run your tunnel/VPN externally (Termux/PC)."
                 )
             }
             
@@ -49,7 +49,7 @@ class CloudflareManager(private val context: Context) {
                 cloudflaredFile.setExecutable(true)
                 if (!cloudflaredFile.canExecute()) {
                     return@withContext TunnelResult.Error(
-                        "Cannot execute cloudflared binary.\n\nTry re-downloading from Settings."
+                        "Cannot execute cloudflared binary.\n\nTip: Switch to Manual mode and run your tunnel/VPN externally (Termux/PC)."
                     )
                 }
             }
@@ -134,8 +134,19 @@ class CloudflareManager(private val context: Context) {
             if (foundUrl != null) {
                 TunnelResult.Success(foundUrl!!)
             } else {
-                val error = lastError ?: "Timeout waiting for tunnel URL. Check internet connection."
-                TunnelResult.Error(error)
+                val outputTail = processOutput.toString().lines().takeLast(12).joinToString("\n").trim()
+                val hint = "Note: Cloudflare quick tunnels are mainly for HTTP; ADB needs raw TCP, so this may never produce a usable endpoint. Try Manual mode."
+                val base = lastError ?: "Timeout waiting for tunnel URL."
+                val msg = buildString {
+                    append(base)
+                    append("\n\n")
+                    append(hint)
+                    if (outputTail.isNotBlank()) {
+                        append("\n\nLast logs:\n")
+                        append(outputTail)
+                    }
+                }
+                TunnelResult.Error(msg)
             }
         } catch (e: Exception) {
             TunnelResult.Error("Error: ${e.message ?: "Unknown error starting cloudflare tunnel"}")

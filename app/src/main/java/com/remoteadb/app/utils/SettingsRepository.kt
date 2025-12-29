@@ -13,8 +13,9 @@ import kotlinx.coroutines.flow.map
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "remote_adb_settings")
 
 enum class TunnelProvider(val displayName: String, val description: String) {
-    CLOUDFLARE("Cloudflare", "Free, no account needed"),
-    NGROK("Ngrok", "Requires free account")
+    MANUAL("Manual", "Use Termux/VPN/SSH (recommended)"),
+    CLOUDFLARE("Cloudflare", "Experimental (TCP may not work)"),
+    NGROK("Ngrok", "TCP often requires paid plan")
 }
 
 object PreferencesKeys {
@@ -56,7 +57,7 @@ class SettingsRepository(private val context: Context) {
     
     val tunnelProvider: Flow<TunnelProvider> = context.dataStore.data
         .map { preferences ->
-            val providerName = preferences[PreferencesKeys.TUNNEL_PROVIDER] ?: TunnelProvider.CLOUDFLARE.name
+            val providerName = preferences[PreferencesKeys.TUNNEL_PROVIDER] ?: TunnelProvider.MANUAL.name
             try {
                 TunnelProvider.valueOf(providerName)
             } catch (e: Exception) {

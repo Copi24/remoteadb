@@ -154,72 +154,18 @@ fun SettingsScreen(
                 ) {
                     SettingsSection(title = "Cloudflare Setup") {
                         Text(
-                            text = "Cloudflare tunnels are FREE and require no account!",
+                            text = "Cloudflare quick tunnels are mainly for HTTP. ADB is raw TCP, so this option may never produce a usable endpoint.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Recommended: switch to Manual mode and run your tunnel/VPN in Termux/PC.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = StatusActive
                         )
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        if (isDownloading) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                CircularProgressIndicator(
-                                    progress = downloadProgress / 100f,
-                                    color = GoldPrimary,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(
-                                    text = "Downloading... $downloadProgress%",
-                                    color = TextSecondary
-                                )
-                            }
-                        } else {
-                            downloadError?.let { error ->
-                                Text(
-                                    text = error,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = StatusInactive
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
-                            
-                            if (downloadSuccess) {
-                                Text(
-                                    text = "✓ Cloudflared is ready!",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = StatusActive
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            GoldGradientButton(
-                                text = if (downloadSuccess) "Re-download" else "Download Cloudflared",
-                                onClick = {
-                                    scope.launch {
-                                        isDownloading = true
-                                        downloadError = null
-                                        downloadSuccess = false
-                                        val success = CloudflareManager.downloadCloudflared(context) { progress ->
-                                            downloadProgress = progress
-                                        }
-                                        isDownloading = false
-                                        if (success) {
-                                            downloadSuccess = true
-                                        } else {
-                                            downloadError = "Download failed. Check internet connection."
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                icon = Icons.Default.CloudDownload
-                            )
-                        }
                     }
                 }
                 
