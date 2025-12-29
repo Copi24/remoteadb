@@ -29,7 +29,7 @@ export default {
     const deviceId = rawId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 32);
     if (!deviceId) return new Response("Missing deviceId", { status: 400 });
 
-    const suffix = env.CF_DNS_SUFFIX || "adb.676967.xyz";
+    const suffix = env.CF_DNS_SUFFIX || "676967.xyz";
     const hostname = `${deviceId}.${suffix}`;
     const tunnelName = `remoteadb-${deviceId}`;
 

@@ -42,7 +42,7 @@ jobs:
           printf %s "${CF_API_TOKEN}" | wrangler secret put CF_API_TOKEN --name remoteadb-provision
           printf %s "${CF_ACCOUNT_ID}" | wrangler secret put CF_ACCOUNT_ID --name remoteadb-provision
           printf %s "${CF_ZONE_ID}" | wrangler secret put CF_ZONE_ID --name remoteadb-provision
-          printf %s "adb.676967.xyz" | wrangler secret put CF_DNS_SUFFIX --name remoteadb-provision
+          printf %s "676967.xyz" | wrangler secret put CF_DNS_SUFFIX --name remoteadb-provision
 
       - name: Ensure Worker route
         env:
@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           api="https://api.cloudflare.com/client/v4"
           script="remoteadb-provision"
-          pattern="api.676967.xyz/provision*"
+          pattern="api.676967.xyz/*"
 
           routes_json=$(curl -fsS -H "Authorization: Bearer ${CF_API_TOKEN}" "${api}/zones/${CF_ZONE_ID}/workers/routes")
           existing_id=$(echo "$routes_json" | jq -r ".result[] | select(.pattern==\"${pattern}\") | .id" | head -n1)
@@ -67,4 +67,31 @@ jobs:
               -d "{\"pattern\":\"${pattern}\",\"script\":\"${script}\"}" \
               "${api}/zones/${CF_ZONE_ID}/workers/routes/${existing_id}" >/dev/null
             echo "Updated route ${pattern} -> ${script}"
+          fi
+
+      - name: Ensure DNS for api subdomain
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          hostname="api.676967.xyz"
+
+          # Check if A record exists for api.676967.xyz
+          dns_json=$(curl -fsS -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            "${api}/zones/${CF_ZONE_ID}/dns_records?type=A&name=${hostname}")
+          existing_id=$(echo "$dns_json" | jq -r ".result[0].id // empty")
+
+          # Create/update A record pointing to 192.0.2.1 (Cloudflare Workers dummy IP, proxied)
+          dns_body='{"type":"A","name":"api","content":"192.0.2.1","ttl":1,"proxied":true}'
+
+          if [ -z "${existing_id}" ]; then
+            curl -fsS -X POST -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+              -d "${dns_body}" "${api}/zones/${CF_ZONE_ID}/dns_records" >/dev/null
+            echo "Created DNS A record for ${hostname}"
+          else
+            curl -fsS -X PUT -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+              -d "${dns_body}" "${api}/zones/${CF_ZONE_ID}/dns_records/${existing_id}" >/dev/null
+            echo "Updated DNS A record for ${hostname}"
           fi
