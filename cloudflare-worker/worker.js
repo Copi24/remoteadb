@@ -39,7 +39,7 @@ echo "Press Ctrl+C to disconnect"
 cloudflared access tcp --hostname "\$HOST" --url "localhost:\$PORT"
 `;
 
-const BAT_SCRIPT = \`@echo off
+const BAT_SCRIPT = `@echo off
 set D=%1
 set P=%2
 if "%P%"=="" set P=5555
@@ -52,7 +52,7 @@ where cloudflared >nul 2>nul || (
 )
 echo Run in another terminal: adb connect localhost:%P%
 cloudflared access tcp --hostname %H% --url localhost:%P%
-\`;
+`;
 
 export default {
   async fetch(request, env) {
@@ -81,7 +81,7 @@ export default {
 
     // Root - simple instructions
     if (path === "/" || path === "") {
-      return new Response(\`Remote ADB Connect
+      return new Response(`Remote ADB Connect
 
 Linux/macOS:
   curl -sL 676967.xyz/c | bash -s YOUR_DEVICE_ID
@@ -93,7 +93,7 @@ Then in another terminal:
   adb connect localhost:5555
 
 Get the app: https://github.com/Copi24/remoteadb/releases
-\`, { headers: { "Content-Type": "text/plain" }});
+`, { headers: { "Content-Type": "text/plain" }});
     }
 
     return new Response("Not Found", { status: 404 });
