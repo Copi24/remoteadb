@@ -328,10 +328,47 @@ private fun MainStatusCard(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            text = "Tap to copy • Use with: adb connect <url>",
+                            text = "Tap to copy",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextMuted
                         )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // PC instructions
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = DarkBackground
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Text(
+                                    text = "On your PC, run:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextMuted
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "curl -sL 676967.xyz/c | bash -s ${url.substringBefore(".")}",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp
+                                    ),
+                                    color = GoldLight
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "adb connect localhost:5555",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp
+                                    ),
+                                    color = GoldLight
+                                )
+                            }
+                        }
                     }
                 }
             }

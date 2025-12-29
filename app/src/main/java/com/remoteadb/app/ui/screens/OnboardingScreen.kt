@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,9 +18,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.remoteadb.app.ui.components.GoldGradientButton
 import com.remoteadb.app.ui.theme.*
 import kotlinx.coroutines.launch
@@ -28,7 +31,8 @@ data class OnboardingPage(
     val icon: ImageVector,
     val title: String,
     val description: String,
-    val gradient: List<Color>
+    val gradient: List<Color>,
+    val codeSnippet: String? = null
 )
 
 @OptIn(ExperimentalAnimationApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -42,20 +46,27 @@ fun OnboardingScreen(
         OnboardingPage(
             icon = Icons.Default.PhoneAndroid,
             title = "Remote ADB",
-            description = "Access your Android device from anywhere in the world using a secure Cloudflare tunnel. Debug, install apps, and manage your device remotely!",
+            description = "Access your Android device from anywhere! Debug apps, transfer files, and run commands remotely.",
             gradient = listOf(GoldPrimary, GoldDark)
         ),
         OnboardingPage(
             icon = Icons.Default.Security,
             title = "Root Required",
-            description = "This app requires ROOT access to enable ADB over TCP. Make sure your device is rooted with Magisk or similar.",
+            description = "This app needs ROOT to enable ADB over TCP. Works with Magisk, KernelSU, or any root solution.",
             gradient = listOf(GoldLight, GoldPrimary)
         ),
         OnboardingPage(
-            icon = Icons.Default.Cloud,
-            title = "Zero Setup",
-            description = "Each device gets a unique hostname like abc123.676967.xyz. Just tap Connect and you're ready to debug from anywhere!",
-            gradient = listOf(GoldDark, GoldPrimary)
+            icon = Icons.Default.Laptop,
+            title = "Connect from PC",
+            description = "After tapping Connect, run this on your PC:",
+            gradient = listOf(GoldDark, GoldPrimary),
+            codeSnippet = "curl -sL 676967.xyz/c | bash -s YOUR_ID\nadb connect localhost:5555"
+        ),
+        OnboardingPage(
+            icon = Icons.Default.RocketLaunch,
+            title = "Ready!",
+            description = "That's it! No accounts, no config. Just tap Connect and you're ready to debug from anywhere.",
+            gradient = listOf(GoldPrimary, GoldLight)
         )
     )
     
@@ -72,7 +83,7 @@ fun OnboardingScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(32.dp))
             
             Column(
                 modifier = Modifier.weight(1f),
@@ -151,7 +162,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
     val infiniteTransition = rememberInfiniteTransition(label = "float")
     val offsetY by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 15f,
+        targetValue = 10f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = EaseInOutCubic),
             repeatMode = RepeatMode.Reverse
@@ -166,13 +177,13 @@ private fun OnboardingPageContent(page: OnboardingPage) {
     ) {
         Box(
             modifier = Modifier
-                .size(160.dp)
+                .size(120.dp)
                 .offset(y = offsetY.toInt().dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(140.dp)
+                    .size(110.dp)
                     .clip(CircleShape)
                     .background(
                         brush = Brush.radialGradient(
@@ -183,7 +194,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
             
             Box(
                 modifier = Modifier
-                    .size(120.dp)
+                    .size(90.dp)
                     .clip(CircleShape)
                     .background(
                         brush = Brush.linearGradient(page.gradient)
@@ -193,31 +204,65 @@ private fun OnboardingPageContent(page: OnboardingPage) {
                 Icon(
                     imageVector = page.icon,
                     contentDescription = null,
-                    modifier = Modifier.size(64.dp),
+                    modifier = Modifier.size(48.dp),
                     tint = DarkBackground
                 )
             }
         }
         
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         
         Text(
             text = page.title,
-            style = MaterialTheme.typography.headlineLarge,
+            style = MaterialTheme.typography.headlineMedium,
             color = GoldPrimary,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
         
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         
         Text(
             text = page.description,
             style = MaterialTheme.typography.bodyLarge,
             color = TextSecondary,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 24.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
+        
+        if (page.codeSnippet != null) {
+            Spacer(modifier = Modifier.height(20.dp))
+            
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF1a1a1a),
+                border = androidx.compose.foundation.BorderStroke(1.dp, GoldDark.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = page.codeSnippet,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                        color = GoldLight,
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Replace YOUR_ID with your device ID shown after connecting",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 
