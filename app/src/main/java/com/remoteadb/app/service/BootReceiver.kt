@@ -17,9 +17,8 @@ class BootReceiver : BroadcastReceiver() {
             
             CoroutineScope(Dispatchers.IO).launch {
                 val autoStart = settingsRepository.autoStartOnBoot.first()
-                val hasToken = settingsRepository.ngrokAuthToken.first().isNotEmpty()
                 
-                if (autoStart && hasToken) {
+                if (autoStart) {
                     ADBService.startService(context)
                 }
             }
