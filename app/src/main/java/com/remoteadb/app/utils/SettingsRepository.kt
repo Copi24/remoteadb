@@ -8,12 +8,15 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "remote_adb_settings")
 
 enum class TunnelProvider(val displayName: String, val description: String) {
     MANUAL("Manual", "Use Termux/VPN/SSH (recommended)"),
+    CLOUDFLARE_MANAGED("Cloudflare (Managed)", "Your domain + per-device hostname"),
     CLOUDFLARE("Cloudflare", "Experimental (TCP may not work)"),
     NGROK("Ngrok", "TCP often requires paid plan")
 }
@@ -25,6 +28,15 @@ object PreferencesKeys {
     val LAST_TUNNEL_URL = stringPreferencesKey("last_tunnel_url")
     val ADB_PORT = stringPreferencesKey("adb_port")
     val TUNNEL_PROVIDER = stringPreferencesKey("tunnel_provider")
+
+    // Managed Cloudflare (provisioned by your Worker/backend)
+    val MANAGED_CF_BASE_DOMAIN = stringPreferencesKey("managed_cf_base_domain")
+    val MANAGED_CF_API_URL = stringPreferencesKey("managed_cf_api_url")
+    val MANAGED_CF_DEVICE_ID = stringPreferencesKey("managed_cf_device_id")
+    val MANAGED_CF_HOSTNAME = stringPreferencesKey("managed_cf_hostname")
+    val MANAGED_CF_RUN_TOKEN = stringPreferencesKey("managed_cf_run_token")
+
+    // Legacy
     val CLOUDFLARED_DOWNLOADED = booleanPreferencesKey("cloudflared_downloaded")
 }
 
@@ -61,10 +73,30 @@ class SettingsRepository(private val context: Context) {
             try {
                 TunnelProvider.valueOf(providerName)
             } catch (e: Exception) {
-                TunnelProvider.CLOUDFLARE
+                TunnelProvider.MANUAL
             }
         }
     
+    val managedCfBaseDomain: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.MANAGED_CF_BASE_DOMAIN] ?: ""
+        }
+
+    val managedCfApiUrl: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.MANAGED_CF_API_URL] ?: ""
+        }
+
+    val managedCfHostname: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.MANAGED_CF_HOSTNAME] ?: ""
+        }
+
+    val managedCfRunToken: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.MANAGED_CF_RUN_TOKEN] ?: ""
+        }
+
     val cloudflaredDownloaded: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.CLOUDFLARED_DOWNLOADED] ?: false
@@ -105,7 +137,37 @@ class SettingsRepository(private val context: Context) {
             preferences[PreferencesKeys.TUNNEL_PROVIDER] = provider.name
         }
     }
-    
+
+    suspend fun setManagedCfBaseDomain(domain: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MANAGED_CF_BASE_DOMAIN] = domain
+        }
+    }
+
+    suspend fun setManagedCfApiUrl(url: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MANAGED_CF_API_URL] = url
+        }
+    }
+
+    suspend fun setManagedCfProvisioning(hostname: String, runToken: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MANAGED_CF_HOSTNAME] = hostname
+            preferences[PreferencesKeys.MANAGED_CF_RUN_TOKEN] = runToken
+        }
+    }
+
+    suspend fun getOrCreateManagedDeviceId(): String {
+        var id = context.dataStore.data.map { it[PreferencesKeys.MANAGED_CF_DEVICE_ID] ?: "" }.first()
+        if (id.isBlank()) {
+            id = UUID.randomUUID().toString().replace("-", "")
+            context.dataStore.edit { preferences ->
+                preferences[PreferencesKeys.MANAGED_CF_DEVICE_ID] = id
+            }
+        }
+        return id
+    }
+
     suspend fun setCloudflaredDownloaded(downloaded: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.CLOUDFLARED_DOWNLOADED] = downloaded

@@ -36,7 +36,11 @@ fun SettingsScreen(
     adbPort: String,
     autoStartOnBoot: Boolean,
     tunnelProvider: TunnelProvider,
+    managedCfBaseDomain: String,
+    managedCfApiUrl: String,
     onNgrokTokenChange: (String) -> Unit,
+    onManagedCfBaseDomainChange: (String) -> Unit,
+    onManagedCfApiUrlChange: (String) -> Unit,
     onAdbPortChange: (String) -> Unit,
     onAutoStartChange: (Boolean) -> Unit,
     onTunnelProviderChange: (TunnelProvider) -> Unit,
@@ -146,6 +150,53 @@ fun SettingsScreen(
                     }
                 }
                 
+                // Cloudflare (Managed) Configuration (if selected)
+                AnimatedVisibility(
+                    visible = tunnelProvider == TunnelProvider.CLOUDFLARE_MANAGED,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    SettingsSection(title = "Cloudflare (Managed)") {
+                        Text(
+                            text = "Creates a per-device hostname under your domain via your Worker/API, then you run cloudflared (Termux) using the returned token.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = managedCfBaseDomain,
+                            onValueChange = onManagedCfBaseDomainChange,
+                            label = { Text("Base Domain") },
+                            placeholder = { Text("034210.xyz") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = managedCfApiUrl,
+                            onValueChange = onManagedCfApiUrlChange,
+                            label = { Text("Provisioning API URL") },
+                            placeholder = { Text("https://api.034210.xyz/provision") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Security: protect this API with Cloudflare Access (JWT) + rate limits. Never put an account-wide API token in the app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted
+                        )
+                    }
+                }
+
                 // Cloudflare Configuration (if selected)
                 AnimatedVisibility(
                     visible = tunnelProvider == TunnelProvider.CLOUDFLARE,

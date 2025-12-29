@@ -106,7 +106,11 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     var ngrokAuthToken by remember { mutableStateOf("") }
     var adbPort by remember { mutableStateOf("5555") }
     var autoStartOnBoot by remember { mutableStateOf(false) }
-    var tunnelProvider by remember { mutableStateOf(TunnelProvider.CLOUDFLARE) }
+    var tunnelProvider by remember { mutableStateOf(TunnelProvider.MANUAL) }
+    var managedCfBaseDomain by remember { mutableStateOf("") }
+    var managedCfApiUrl by remember { mutableStateOf("") }
+    var managedCfHostname by remember { mutableStateOf("") }
+    var managedCfRunToken by remember { mutableStateOf("") }
     var deviceInfo by remember { mutableStateOf<DeviceInfo?>(null) }
     var localIp by remember { mutableStateOf<String?>(null) }
     var hasRootAccess by remember { mutableStateOf(false) }
@@ -120,6 +124,10 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
         adbPort = settingsRepository.adbPort.first()
         autoStartOnBoot = settingsRepository.autoStartOnBoot.first()
         tunnelProvider = settingsRepository.tunnelProvider.first()
+        managedCfBaseDomain = settingsRepository.managedCfBaseDomain.first()
+        managedCfApiUrl = settingsRepository.managedCfApiUrl.first()
+        managedCfHostname = settingsRepository.managedCfHostname.first()
+        managedCfRunToken = settingsRepository.managedCfRunToken.first()
         tunnelUrl = settingsRepository.lastTunnelUrl.first().takeIf { it.isNotEmpty() }
         
         // Load device info
@@ -140,6 +148,18 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     }
     LaunchedEffect(Unit) {
         settingsRepository.tunnelProvider.collect { tunnelProvider = it }
+    }
+    LaunchedEffect(Unit) {
+        settingsRepository.managedCfBaseDomain.collect { managedCfBaseDomain = it }
+    }
+    LaunchedEffect(Unit) {
+        settingsRepository.managedCfApiUrl.collect { managedCfApiUrl = it }
+    }
+    LaunchedEffect(Unit) {
+        settingsRepository.managedCfHostname.collect { managedCfHostname = it }
+    }
+    LaunchedEffect(Unit) {
+        settingsRepository.managedCfRunToken.collect { managedCfRunToken = it }
     }
     
     // Determine start destination
@@ -192,9 +212,14 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
         composable("home") {
             val context = androidx.compose.ui.platform.LocalContext.current
             
+            val managedRunCommand = if (tunnelProvider == TunnelProvider.CLOUDFLARE_MANAGED && managedCfRunToken.isNotBlank()) {
+                "cloudflared tunnel run --token $managedCfRunToken"
+            } else null
+
             HomeScreen(
                 serviceState = serviceState,
                 tunnelUrl = tunnelUrl,
+                managedRunCommand = managedRunCommand,
                 deviceInfo = deviceInfo,
                 localIp = localIp,
                 adbPort = adbPort,
@@ -239,10 +264,18 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                 adbPort = adbPort,
                 autoStartOnBoot = autoStartOnBoot,
                 tunnelProvider = tunnelProvider,
+                managedCfBaseDomain = managedCfBaseDomain,
+                managedCfApiUrl = managedCfApiUrl,
                 onNgrokTokenChange = { token ->
                     scope.launch {
                         settingsRepository.setNgrokAuthToken(token)
                     }
+                },
+                onManagedCfBaseDomainChange = { domain ->
+                    scope.launch { settingsRepository.setManagedCfBaseDomain(domain) }
+                },
+                onManagedCfApiUrlChange = { url ->
+                    scope.launch { settingsRepository.setManagedCfApiUrl(url) }
                 },
                 onAdbPortChange = { port ->
                     scope.launch {

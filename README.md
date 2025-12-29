@@ -5,9 +5,9 @@ A stunning, polished Android app for remote ADB access over the internet using s
 ## ✨ Features
 
 - **🌐 Remote Access**: Access your Android device from anywhere via a secure URL
-- **🔒 Secure Tunneling**: Choose between Cloudflare (free!) or Ngrok
+- **🔒 Multiple Modes**: Manual (recommended), Cloudflare (managed), Ngrok
 - **🎨 Gold Premium Design**: Beautiful Material 3 UI with gold accent theme
-- **⚡ Easy Setup**: Cloudflare requires no account - just connect!
+- **⚡ Realistic Onboarding**: Clear guidance for TCP ADB + tunnel/VPN options
 - **🚀 One-Tap Connect**: Start/stop the tunnel with a single tap
 - **📋 Copy URL**: Easily copy the tunnel URL to clipboard
 - **🔄 Auto-start**: Option to automatically start tunnel on device boot
@@ -20,37 +20,33 @@ A stunning, polished Android app for remote ADB access over the internet using s
 
 ## 🚀 Setup
 
-### Option 1: Cloudflare (Recommended - 100% FREE)
+### Option 1: Manual (Recommended)
 
-1. **Install the App**
-   - Download the APK from [Releases](../../releases) or build it yourself
-   - Grant root access when prompted
+The app enables **ADB over TCP** (root required). You provide the network path using your preferred tool:
+- Same Wi‑Fi: `adb connect <device-ip>:5555`
+- VPN: Tailscale / ZeroTier / WireGuard
+- SSH reverse tunnel
 
-2. **Download Cloudflared**
-   - The app will prompt you to download the cloudflared binary
-   - This is a one-time ~25MB download
+### Option 2: Cloudflare (Managed, your domain)
 
-3. **Connect**
-   - Tap "Connect" on the home screen
-   - Wait for the tunnel URL to appear
-   - Use the URL on any computer:
-     ```bash
-     adb connect your-tunnel-url.trycloudflare.com:port
-     ```
+This mode is designed for **many devices/users under your domain** using a per-device hostname like:
+`<deviceId>.adb.<your-domain>`.
 
-### Option 2: Ngrok (Requires Account)
+How it works:
+1) You deploy a small provisioning endpoint (see `cloudflare-worker/worker.js`) that creates a tunnel + DNS + returns a **run token**.
+2) The app calls that API and shows the command to run on-device:
+   ```bash
+   cloudflared tunnel run --token <token>
+   ```
+3) On your PC, connect via Access TCP:
+   ```bash
+   cloudflared access tcp --hostname <deviceId>.adb.<your-domain> --url 127.0.0.1:15555
+   adb connect 127.0.0.1:15555
+   ```
 
-1. **Get Ngrok Token**
-   - Sign up at [ngrok.com](https://ngrok.com)
-   - Copy your auth token from the dashboard
-   - Note: TCP tunnels may require a paid plan
+### Option 3: Ngrok
 
-2. **Configure**
-   - Select Ngrok during onboarding
-   - Paste your auth token
-
-3. **Connect**
-   - Tap "Connect" and use the provided URL
+Ngrok is easy but **TCP often requires a paid plan**; use only if it works for your account.
 
 ## 🎨 Design
 

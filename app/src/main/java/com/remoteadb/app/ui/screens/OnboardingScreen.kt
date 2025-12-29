@@ -264,6 +264,21 @@ private fun ProviderSelectionPage(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Cloudflare (Managed) option
+        ProviderCard(
+            provider = TunnelProvider.CLOUDFLARE_MANAGED,
+            isSelected = selectedProvider == TunnelProvider.CLOUDFLARE_MANAGED,
+            onClick = { onProviderSelected(TunnelProvider.CLOUDFLARE_MANAGED) },
+            benefits = listOf(
+                "✓ Your domain",
+                "✓ One hostname per device",
+                "✓ Secure via Cloudflare Access",
+                "✓ Requires your Worker/API"
+            )
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Cloudflare option
         ProviderCard(
             provider = TunnelProvider.CLOUDFLARE,
@@ -392,6 +407,7 @@ private fun SetupScreen(
         Icon(
             imageVector = when (provider) {
                 TunnelProvider.CLOUDFLARE -> Icons.Default.Cloud
+                TunnelProvider.CLOUDFLARE_MANAGED -> Icons.Default.Domain
                 TunnelProvider.NGROK -> Icons.Default.Key
                 TunnelProvider.MANUAL -> Icons.Default.SettingsEthernet
             },
@@ -405,6 +421,7 @@ private fun SetupScreen(
         Text(
             text = when (provider) {
                 TunnelProvider.CLOUDFLARE -> "Setup Cloudflare"
+                TunnelProvider.CLOUDFLARE_MANAGED -> "Cloudflare (Managed)"
                 TunnelProvider.NGROK -> "Setup Ngrok"
                 TunnelProvider.MANUAL -> "Manual Setup"
             }, 
@@ -415,7 +432,28 @@ private fun SetupScreen(
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        if (provider == TunnelProvider.CLOUDFLARE) {
+        if (provider == TunnelProvider.CLOUDFLARE_MANAGED) {
+            Text(
+                text = "Cloudflare (Managed) uses your domain and a per-device hostname.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkCard)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("1) Configure API URL + base domain in Settings", color = TextSecondary)
+                    Text("2) Tap Get Started to provision a hostname", color = TextSecondary)
+                    Text("3) Run the shown cloudflared command in Termux", color = TextSecondary)
+                    Text("4) On PC use: cloudflared access tcp ... then adb connect", color = TextSecondary)
+                }
+            }
+        } else if (provider == TunnelProvider.CLOUDFLARE) {
             // Cloudflare setup
             Text(
                 text = "🎉 Cloudflare tunnels are completely FREE!",

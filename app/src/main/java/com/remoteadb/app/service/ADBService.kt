@@ -15,6 +15,7 @@ import com.remoteadb.app.MainActivity
 import com.remoteadb.app.R
 import com.remoteadb.app.utils.ADBManager
 import com.remoteadb.app.utils.CloudflareManager
+import com.remoteadb.app.utils.ManagedCloudflareProvisioner
 import com.remoteadb.app.utils.NgrokManager
 import com.remoteadb.app.utils.SettingsRepository
 import com.remoteadb.app.utils.TunnelProvider
@@ -92,6 +93,16 @@ class ADBService : Service() {
                     return@launch
                 }
             }
+
+            if (provider == TunnelProvider.CLOUDFLARE_MANAGED) {
+                val apiUrl = settingsRepository.managedCfApiUrl.first()
+                val domain = settingsRepository.managedCfBaseDomain.first()
+                if (apiUrl.isBlank() || domain.isBlank()) {
+                    _serviceState.value = ServiceState.Error("Cloudflare (Managed) not configured. Set API URL + base domain in Settings.")
+                    stopSelf()
+                    return@launch
+                }
+            }
             
             // Enable TCP ADB
             updateNotification("Enabling ADB over TCP...")
@@ -115,6 +126,15 @@ class ADBService : Service() {
                     val ip = runCatching { ADBManager.getLocalIpAddress() }.getOrNull().orEmpty()
                     val url = if (ip.isNotBlank()) "tcp://$ip:$port" else "tcp://<device-ip>:$port"
                     TunnelResult.Success(url)
+                }
+                TunnelProvider.CLOUDFLARE_MANAGED -> {
+                    val apiUrl = settingsRepository.managedCfApiUrl.first()
+                    val domain = settingsRepository.managedCfBaseDomain.first()
+                    val deviceId = settingsRepository.getOrCreateManagedDeviceId()
+                    updateNotification("Provisioning Cloudflare hostname...")
+                    val provisioned = ManagedCloudflareProvisioner.provision(apiUrl, domain, deviceId)
+                    settingsRepository.setManagedCfProvisioning(provisioned.hostname, provisioned.runToken)
+                    TunnelResult.Success(provisioned.hostname)
                 }
                 TunnelProvider.CLOUDFLARE -> {
                     cloudflareManager.startTunnel(port)
@@ -149,6 +169,7 @@ class ADBService : Service() {
             // Stop the appropriate tunnel
             when (currentProvider) {
                 TunnelProvider.MANUAL -> Unit
+                TunnelProvider.CLOUDFLARE_MANAGED -> Unit
                 TunnelProvider.CLOUDFLARE -> cloudflareManager.stopTunnel()
                 TunnelProvider.NGROK -> ngrokManager.stopTunnel()
             }

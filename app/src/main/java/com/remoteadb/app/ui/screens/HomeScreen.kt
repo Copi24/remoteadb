@@ -43,6 +43,7 @@ import com.remoteadb.app.utils.DeviceInfo
 fun HomeScreen(
     serviceState: ServiceState,
     tunnelUrl: String?,
+    managedRunCommand: String?,
     deviceInfo: DeviceInfo?,
     localIp: String?,
     adbPort: String,
@@ -104,11 +105,12 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(20.dp))
             
             // Connection info card
-            if (tunnelUrl != null || localIp != null) {
+            if (tunnelUrl != null || localIp != null || managedRunCommand != null) {
                 ConnectionInfoCard(
                     tunnelUrl = tunnelUrl,
                     localIp = localIp,
-                    port = adbPort
+                    port = adbPort,
+                    managedRunCommand = managedRunCommand
                 )
                 Spacer(modifier = Modifier.height(20.dp))
             }
@@ -362,7 +364,8 @@ private fun MainStatusCard(
 private fun ConnectionInfoCard(
     tunnelUrl: String?,
     localIp: String?,
-    port: String
+    port: String,
+    managedRunCommand: String?
 ) {
     GlowingCard(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -386,8 +389,17 @@ private fun ConnectionInfoCard(
             Spacer(modifier = Modifier.height(12.dp))
             InfoRow(
                 icon = Icons.Outlined.Cloud,
-                label = "Remote URL",
+                label = "Remote Hostname",
                 value = tunnelUrl
+            )
+        }
+
+        if (managedRunCommand != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            InfoRow(
+                icon = Icons.Outlined.Code,
+                label = "Run on device (Termux)",
+                value = managedRunCommand
             )
         }
     }
