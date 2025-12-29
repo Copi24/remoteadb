@@ -51,22 +51,24 @@ jobs:
           set -euo pipefail
           api="https://api.cloudflare.com/client/v4"
           script="remoteadb-provision"
-          pattern="api.676967.xyz/*"
+          
+          # Route for api.676967.xyz/*
+          for pattern in "api.676967.xyz/*" "676967.xyz/*"; do
+            routes_json=$(curl -fsS -H "Authorization: Bearer ${CF_API_TOKEN}" "${api}/zones/${CF_ZONE_ID}/workers/routes")
+            existing_id=$(echo "$routes_json" | jq -r ".result[] | select(.pattern==\"${pattern}\") | .id" | head -n1)
 
-          routes_json=$(curl -fsS -H "Authorization: Bearer ${CF_API_TOKEN}" "${api}/zones/${CF_ZONE_ID}/workers/routes")
-          existing_id=$(echo "$routes_json" | jq -r ".result[] | select(.pattern==\"${pattern}\") | .id" | head -n1)
-
-          if [ -z "${existing_id}" ] || [ "${existing_id}" = "null" ]; then
-            curl -fsS -X POST -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
-              -d "{\"pattern\":\"${pattern}\",\"script\":\"${script}\"}" \
-              "${api}/zones/${CF_ZONE_ID}/workers/routes" >/dev/null
-            echo "Created route ${pattern} -> ${script}"
-          else
-            curl -fsS -X PUT -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
-              -d "{\"pattern\":\"${pattern}\",\"script\":\"${script}\"}" \
-              "${api}/zones/${CF_ZONE_ID}/workers/routes/${existing_id}" >/dev/null
-            echo "Updated route ${pattern} -> ${script}"
-          fi
+            if [ -z "${existing_id}" ] || [ "${existing_id}" = "null" ]; then
+              curl -fsS -X POST -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+                -d "{\"pattern\":\"${pattern}\",\"script\":\"${script}\"}" \
+                "${api}/zones/${CF_ZONE_ID}/workers/routes" >/dev/null
+              echo "Created route ${pattern} -> ${script}"
+            else
+              curl -fsS -X PUT -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+                -d "{\"pattern\":\"${pattern}\",\"script\":\"${script}\"}" \
+                "${api}/zones/${CF_ZONE_ID}/workers/routes/${existing_id}" >/dev/null
+              echo "Updated route ${pattern} -> ${script}"
+            fi
+          done
 
       - name: Ensure DNS for api subdomain
         env:
@@ -75,22 +77,25 @@ jobs:
         run: |
           set -euo pipefail
           api="https://api.cloudflare.com/client/v4"
-          hostname="api.676967.xyz"
+          
+          # Create DNS records for both api.676967.xyz and 676967.xyz (root)
+          for record in "api:api.676967.xyz" "@:676967.xyz"; do
+            name="${record%%:*}"
+            hostname="${record##*:}"
+            
+            dns_json=$(curl -fsS -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              "${api}/zones/${CF_ZONE_ID}/dns_records?type=A&name=${hostname}")
+            existing_id=$(echo "$dns_json" | jq -r ".result[0].id // empty")
 
-          # Check if A record exists for api.676967.xyz
-          dns_json=$(curl -fsS -H "Authorization: Bearer ${CF_API_TOKEN}" \
-            "${api}/zones/${CF_ZONE_ID}/dns_records?type=A&name=${hostname}")
-          existing_id=$(echo "$dns_json" | jq -r ".result[0].id // empty")
+            dns_body="{\"type\":\"A\",\"name\":\"${name}\",\"content\":\"192.0.2.1\",\"ttl\":1,\"proxied\":true}"
 
-          # Create/update A record pointing to 192.0.2.1 (Cloudflare Workers dummy IP, proxied)
-          dns_body='{"type":"A","name":"api","content":"192.0.2.1","ttl":1,"proxied":true}'
-
-          if [ -z "${existing_id}" ]; then
-            curl -fsS -X POST -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
-              -d "${dns_body}" "${api}/zones/${CF_ZONE_ID}/dns_records" >/dev/null
-            echo "Created DNS A record for ${hostname}"
-          else
-            curl -fsS -X PUT -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
-              -d "${dns_body}" "${api}/zones/${CF_ZONE_ID}/dns_records/${existing_id}" >/dev/null
-            echo "Updated DNS A record for ${hostname}"
-          fi
+            if [ -z "${existing_id}" ]; then
+              curl -fsS -X POST -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+                -d "${dns_body}" "${api}/zones/${CF_ZONE_ID}/dns_records" >/dev/null
+              echo "Created DNS A record for ${hostname}"
+            else
+              curl -fsS -X PUT -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+                -d "${dns_body}" "${api}/zones/${CF_ZONE_ID}/dns_records/${existing_id}" >/dev/null
+              echo "Updated DNS A record for ${hostname}"
+            fi
+          done

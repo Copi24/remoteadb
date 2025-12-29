@@ -1,22 +1,106 @@
 // Cloudflare Worker: provisions a per-device Cloudflare Tunnel + DNS + run token.
-// Secure this endpoint with Cloudflare Access (recommended) and rate limits.
+// Also serves the PC connect script at /c
 //
 // Required env vars:
 // - CF_API_TOKEN: API token with permissions to manage Tunnels + DNS for the zone
 // - CF_ACCOUNT_ID: Cloudflare account id
 // - CF_ZONE_ID: Zone id for your base domain
-// - CF_DNS_SUFFIX: e.g. "adb.676967.xyz" (deviceId will be prepended)
+// - CF_DNS_SUFFIX: e.g. "676967.xyz" (deviceId will be prepended)
 //
-// Expected request JSON:
-// {"deviceId":"<stable-id>"}
-// Response JSON:
-// {"hostname":"<deviceId>.adb.676967.xyz","token":"<tunnel-run-token>"}
+// Endpoints:
+// POST /provision - provision a tunnel
+// GET /c - bash connect script
+// GET /connect.bat - windows connect script
+
+const BASH_SCRIPT = `#!/bin/bash
+# Remote ADB Connect - curl -sL 676967.xyz/c | bash -s DEVICE_ID
+set -e
+DEVICE="\${1:-}"; PORT="\${2:-5555}"; HOST="\$DEVICE.676967.xyz"
+[ -z "\$DEVICE" ] && echo "Usage: curl -sL 676967.xyz/c | bash -s DEVICE_ID" && exit 1
+echo "Connecting to \$HOST..."
+if ! command -v cloudflared &>/dev/null; then
+  echo "Installing cloudflared..."
+  OS=\$(uname -s); ARCH=\$(uname -m)
+  case "\$OS-\$ARCH" in
+    Linux-x86_64) URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64";;
+    Linux-aarch64|Linux-arm64) URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64";;
+    Darwin-x86_64) URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz";;
+    Darwin-arm64) URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz";;
+    *) echo "Unsupported: \$OS-\$ARCH"; exit 1;;
+  esac
+  if [[ "\$URL" == *.tgz ]]; then
+    curl -sL "\$URL" | sudo tar xz -C /usr/local/bin
+  else
+    sudo curl -sL "\$URL" -o /usr/local/bin/cloudflared && sudo chmod +x /usr/local/bin/cloudflared
+  fi
+fi
+echo "Run in another terminal: adb connect localhost:\$PORT"
+echo "Press Ctrl+C to disconnect"
+cloudflared access tcp --hostname "\$HOST" --url "localhost:\$PORT"
+`;
+
+const BAT_SCRIPT = \`@echo off
+set D=%1
+set P=%2
+if "%P%"=="" set P=5555
+if "%D%"=="" (echo Usage: connect.bat DEVICE_ID & exit /b 1)
+set H=%D%.676967.xyz
+echo Connecting to %H%...
+where cloudflared >nul 2>nul || (
+  echo Downloading cloudflared...
+  curl -sLo cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+)
+echo Run in another terminal: adb connect localhost:%P%
+cloudflared access tcp --hostname %H% --url localhost:%P%
+\`;
 
 export default {
   async fetch(request, env) {
-    if (request.method !== "POST") {
-      return new Response("Method Not Allowed", { status: 405 });
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    // Serve connect scripts
+    if (path === "/c" || path === "/connect.sh") {
+      return new Response(BASH_SCRIPT, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" }
+      });
     }
+    if (path === "/connect.bat") {
+      return new Response(BAT_SCRIPT, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" }
+      });
+    }
+
+    // Provision endpoint
+    if (path === "/provision") {
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405 });
+      }
+      return handleProvision(request, env);
+    }
+
+    // Root - simple instructions
+    if (path === "/" || path === "") {
+      return new Response(\`Remote ADB Connect
+
+Linux/macOS:
+  curl -sL 676967.xyz/c | bash -s YOUR_DEVICE_ID
+
+Windows:
+  curl -sLO 676967.xyz/connect.bat && connect.bat YOUR_DEVICE_ID
+
+Then in another terminal:
+  adb connect localhost:5555
+
+Get the app: https://github.com/Copi24/remoteadb/releases
+\`, { headers: { "Content-Type": "text/plain" }});
+    }
+
+    return new Response("Not Found", { status: 404 });
+  },
+};
+
+async function handleProvision(request, env) {
 
     let body;
     try {
@@ -156,5 +240,4 @@ export default {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  },
-};
+}

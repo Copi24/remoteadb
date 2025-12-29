@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote ADB Connect</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #ffd700;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 40px;
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,215,0,0.2);
+        }
+        h2 { color: #ffd700; margin-top: 0; }
+        code {
+            background: #000;
+            padding: 15px 20px;
+            border-radius: 8px;
+            display: block;
+            font-size: 14px;
+            overflow-x: auto;
+            border-left: 3px solid #ffd700;
+        }
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .step-num {
+            background: #ffd700;
+            color: #000;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .step-content { flex: 1; }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .tab.active {
+            background: #ffd700;
+            color: #000;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .copy-btn {
+            background: #ffd700;
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .copy-btn:hover { background: #ffed4a; }
+        a { color: #ffd700; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 Remote ADB Connect</h1>
+        <p class="subtitle">Connect to your Android device from anywhere</p>
+
+        <div class="card">
+            <h2>Quick Start</h2>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('linux')">Linux / macOS</button>
+                <button class="tab" onclick="showTab('windows')">Windows</button>
+            </div>
+
+            <div id="linux" class="tab-content active">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <p>Run this command (replace <strong>YOUR_DEVICE_ID</strong> with your ID from the app):</p>
+                        <code id="linux-cmd">curl -sL https://676967.xyz/c | bash -s YOUR_DEVICE_ID</code>
+                        <button class="copy-btn" onclick="copyCmd('linux-cmd')">📋 Copy</button>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <p>In another terminal, connect with ADB:</p>
+                        <code id="adb-cmd">adb connect localhost:5555</code>
+                        <button class="copy-btn" onclick="copyCmd('adb-cmd')">📋 Copy</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="windows" class="tab-content">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <p>Download and run the connect script:</p>
+                        <code>curl -sLO https://676967.xyz/connect.bat && connect.bat YOUR_DEVICE_ID</code>
+                        <p style="margin-top:10px;color:#888;">Or <a href="connect.bat" download>download connect.bat</a> manually</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <p>In another terminal, connect with ADB:</p>
+                        <code>adb connect localhost:5555</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📱 Get Your Device ID</h2>
+            <p>Your device ID is shown in the Remote ADB app after you tap "Connect". It looks like: <code style="display:inline;padding:5px 10px;">myphone123</code></p>
+            <p>Your full connection address will be: <strong>YOUR_DEVICE_ID.676967.xyz</strong></p>
+        </div>
+
+        <div class="card">
+            <h2>📥 Download the App</h2>
+            <p>Get Remote ADB from <a href="https://github.com/Copi24/remoteadb/releases">GitHub Releases</a></p>
+        </div>
+    </div>
+
+    <script>
+        function showTab(id) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${id}')"]`).classList.add('active');
+            document.getElementById(id).classList.add('active');
+        }
+        function copyCmd(id) {
+            const text = document.getElementById(id).textContent;
+            navigator.clipboard.writeText(text);
+            event.target.textContent = '✓ Copied!';
+            setTimeout(() => event.target.textContent = '📋 Copy', 2000);
+        }
+    </script>
+</body>
+</html>
