@@ -163,17 +163,17 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        InfoRow(
+                        SettingsInfoItem(
                             icon = Icons.Outlined.Domain,
-                            label = "Base Domain",
+                            title = "Base Domain",
                             value = managedCfBaseDomain
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        InfoRow(
+                        SettingsInfoItem(
                             icon = Icons.Outlined.Cloud,
-                            label = "Provisioning API",
+                            title = "Provisioning API",
                             value = managedCfApiUrl
                         )
 
