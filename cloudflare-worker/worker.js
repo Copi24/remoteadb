@@ -28,6 +28,8 @@ export default {
     const rawId = String(body.deviceId || "");
     const deviceId = rawId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 32);
     if (!deviceId) return new Response("Missing deviceId", { status: 400 });
+    
+    const adbPort = parseInt(body.adbPort) || 5555;
 
     const suffix = env.CF_DNS_SUFFIX || "676967.xyz";
     const hostname = `${deviceId}.${suffix}`;
@@ -111,7 +113,33 @@ export default {
       });
     }
 
-    // 3) Get tunnel run token
+    // 3) Configure tunnel ingress for TCP on port 5555
+    const configRes = await fetch(`${apiBase}/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel/${tunnelId}/configurations`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        config: {
+          ingress: [
+            {
+              hostname: hostname,
+              service: `tcp://localhost:${adbPort}`
+            },
+            {
+              service: "http_status:404"
+            }
+          ]
+        }
+      }),
+    });
+    const configJson = await configRes.json();
+    if (!configRes.ok || !configJson?.success) {
+      return new Response(JSON.stringify({ error: "config_failed", details: configJson }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // 4) Get tunnel run token
     const tokenRes = await fetch(`${apiBase}/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel/${tunnelId}/token`, {
       method: "GET",
       headers,
