@@ -17,38 +17,22 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "re
 private const val DEFAULT_MANAGED_CF_BASE_DOMAIN = "676967.xyz"
 private const val DEFAULT_MANAGED_CF_API_URL = "https://api.676967.xyz/provision"
 
-enum class TunnelProvider(val displayName: String, val description: String) {
-    MANUAL("Manual", "Use Termux/VPN/SSH (recommended)"),
-    CLOUDFLARE_MANAGED("Cloudflare (Managed)", "Your domain + per-device hostname"),
-    CLOUDFLARE("Cloudflare", "Experimental (TCP may not work)"),
-    NGROK("Ngrok", "TCP often requires paid plan")
-}
+// Single provider - Cloudflare managed tunnels via 676967.xyz
+// Each device gets a unique hostname like abc123.676967.xyz
 
 object PreferencesKeys {
-    val NGROK_AUTH_TOKEN = stringPreferencesKey("ngrok_auth_token")
     val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     val AUTO_START_ON_BOOT = booleanPreferencesKey("auto_start_on_boot")
     val LAST_TUNNEL_URL = stringPreferencesKey("last_tunnel_url")
     val ADB_PORT = stringPreferencesKey("adb_port")
-    val TUNNEL_PROVIDER = stringPreferencesKey("tunnel_provider")
 
-    // Managed Cloudflare (provisioned by your Worker/backend)
-    val MANAGED_CF_BASE_DOMAIN = stringPreferencesKey("managed_cf_base_domain")
-    val MANAGED_CF_API_URL = stringPreferencesKey("managed_cf_api_url")
+    // Managed Cloudflare (provisioned by Worker at api.676967.xyz)
     val MANAGED_CF_DEVICE_ID = stringPreferencesKey("managed_cf_device_id")
     val MANAGED_CF_HOSTNAME = stringPreferencesKey("managed_cf_hostname")
     val MANAGED_CF_RUN_TOKEN = stringPreferencesKey("managed_cf_run_token")
-
-    // Legacy
-    val CLOUDFLARED_DOWNLOADED = booleanPreferencesKey("cloudflared_downloaded")
 }
 
 class SettingsRepository(private val context: Context) {
-    
-    val ngrokAuthToken: Flow<String> = context.dataStore.data
-        .map { preferences ->
-            preferences[PreferencesKeys.NGROK_AUTH_TOKEN] ?: ""
-        }
     
     val onboardingCompleted: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
@@ -69,30 +53,6 @@ class SettingsRepository(private val context: Context) {
         .map { preferences ->
             preferences[PreferencesKeys.ADB_PORT] ?: "5555"
         }
-    
-    val tunnelProvider: Flow<TunnelProvider> = context.dataStore.data
-        .map { preferences ->
-            val providerName = preferences[PreferencesKeys.TUNNEL_PROVIDER] ?: TunnelProvider.CLOUDFLARE_MANAGED.name
-            try {
-                TunnelProvider.valueOf(providerName)
-            } catch (e: Exception) {
-                TunnelProvider.MANUAL
-            }
-        }
-    
-    val managedCfBaseDomain: Flow<String> = context.dataStore.data
-        .map { preferences ->
-            preferences[PreferencesKeys.MANAGED_CF_BASE_DOMAIN]
-                ?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_MANAGED_CF_BASE_DOMAIN
-        }
-
-    val managedCfApiUrl: Flow<String> = context.dataStore.data
-        .map { preferences ->
-            preferences[PreferencesKeys.MANAGED_CF_API_URL]
-                ?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_MANAGED_CF_API_URL
-        }
 
     val managedCfHostname: Flow<String> = context.dataStore.data
         .map { preferences ->
@@ -103,17 +63,6 @@ class SettingsRepository(private val context: Context) {
         .map { preferences ->
             preferences[PreferencesKeys.MANAGED_CF_RUN_TOKEN] ?: ""
         }
-
-    val cloudflaredDownloaded: Flow<Boolean> = context.dataStore.data
-        .map { preferences ->
-            preferences[PreferencesKeys.CLOUDFLARED_DOWNLOADED] ?: false
-        }
-    
-    suspend fun setNgrokAuthToken(token: String) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.NGROK_AUTH_TOKEN] = token
-        }
-    }
     
     suspend fun setOnboardingCompleted(completed: Boolean) {
         context.dataStore.edit { preferences ->
@@ -138,24 +87,6 @@ class SettingsRepository(private val context: Context) {
             preferences[PreferencesKeys.ADB_PORT] = port
         }
     }
-    
-    suspend fun setTunnelProvider(provider: TunnelProvider) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.TUNNEL_PROVIDER] = provider.name
-        }
-    }
-
-    suspend fun setManagedCfBaseDomain(domain: String) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.MANAGED_CF_BASE_DOMAIN] = domain
-        }
-    }
-
-    suspend fun setManagedCfApiUrl(url: String) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.MANAGED_CF_API_URL] = url
-        }
-    }
 
     suspend fun setManagedCfProvisioning(hostname: String, runToken: String) {
         context.dataStore.edit { preferences ->
@@ -175,9 +106,6 @@ class SettingsRepository(private val context: Context) {
         return id
     }
 
-    suspend fun setCloudflaredDownloaded(downloaded: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.CLOUDFLARED_DOWNLOADED] = downloaded
-        }
-    }
+    fun getApiUrl(): String = DEFAULT_MANAGED_CF_API_URL
+    fun getBaseDomain(): String = DEFAULT_MANAGED_CF_BASE_DOMAIN
 }

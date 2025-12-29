@@ -14,12 +14,8 @@ import androidx.core.app.NotificationCompat
 import com.remoteadb.app.MainActivity
 import com.remoteadb.app.R
 import com.remoteadb.app.utils.ADBManager
-import com.remoteadb.app.utils.CloudflareManager
 import com.remoteadb.app.utils.ManagedCloudflareProvisioner
-import com.remoteadb.app.utils.NgrokManager
 import com.remoteadb.app.utils.SettingsRepository
-import com.remoteadb.app.utils.TunnelProvider
-import com.remoteadb.app.utils.TunnelResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,10 +29,8 @@ class ADBService : Service() {
     
     private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private lateinit var ngrokManager: NgrokManager
-    private lateinit var cloudflareManager: CloudflareManager
     private lateinit var settingsRepository: SettingsRepository
-    private var currentProvider: TunnelProvider = TunnelProvider.CLOUDFLARE
+    private var cloudflaredProcess: Process? = null
     
     private val _serviceState = MutableStateFlow<ServiceState>(ServiceState.Stopped)
     val serviceState: StateFlow<ServiceState> = _serviceState
@@ -50,8 +44,6 @@ class ADBService : Service() {
     
     override fun onCreate() {
         super.onCreate()
-        ngrokManager = NgrokManager(this)
-        cloudflareManager = CloudflareManager(this)
         settingsRepository = SettingsRepository(this)
         createNotificationChannel()
     }
@@ -69,8 +61,7 @@ class ADBService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
-        ngrokManager.stopTunnel()
-        cloudflareManager.stopTunnel()
+        cloudflaredProcess?.destroy()
     }
     
     private fun startAdbTunnel() {
@@ -79,30 +70,7 @@ class ADBService : Service() {
             
             startForeground(NOTIFICATION_ID, createNotification("Starting ADB tunnel..."))
             
-            // Get settings
-            val provider = settingsRepository.tunnelProvider.first()
-            currentProvider = provider
             val port = settingsRepository.adbPort.first().toIntOrNull() ?: 5555
-            
-            // Check provider-specific requirements
-            if (provider == TunnelProvider.NGROK) {
-                val authToken = settingsRepository.ngrokAuthToken.first()
-                if (authToken.isEmpty()) {
-                    _serviceState.value = ServiceState.Error("Ngrok auth token not configured. Go to Settings to add it.")
-                    stopSelf()
-                    return@launch
-                }
-            }
-
-            if (provider == TunnelProvider.CLOUDFLARE_MANAGED) {
-                val apiUrl = settingsRepository.managedCfApiUrl.first()
-                val domain = settingsRepository.managedCfBaseDomain.first()
-                if (apiUrl.isBlank() || domain.isBlank()) {
-                    _serviceState.value = ServiceState.Error("Cloudflare (Managed) not configured. Set API URL + base domain in Settings.")
-                    stopSelf()
-                    return@launch
-                }
-            }
             
             // Enable TCP ADB
             updateNotification("Enabling ADB over TCP...")
@@ -116,63 +84,109 @@ class ADBService : Service() {
             // Small delay to ensure ADB is ready
             kotlinx.coroutines.delay(1000)
             
-            // Start tunnel based on provider
-            updateNotification(
-                if (provider == TunnelProvider.MANUAL) "ADB over TCP enabled (manual mode)..." else "Starting ${provider.displayName} tunnel..."
-            )
+            // Provision hostname via Cloudflare Worker
+            updateNotification("Provisioning tunnel...")
+            val apiUrl = settingsRepository.getApiUrl()
+            val domain = settingsRepository.getBaseDomain()
+            val deviceId = settingsRepository.getOrCreateManagedDeviceId()
             
-            val result = when (provider) {
-                TunnelProvider.MANUAL -> {
-                    val ip = runCatching { ADBManager.getLocalIpAddress() }.getOrNull().orEmpty()
-                    val url = if (ip.isNotBlank()) "tcp://$ip:$port" else "tcp://<device-ip>:$port"
-                    TunnelResult.Success(url)
-                }
-                TunnelProvider.CLOUDFLARE_MANAGED -> {
-                    val apiUrl = settingsRepository.managedCfApiUrl.first()
-                    val domain = settingsRepository.managedCfBaseDomain.first()
-                    val deviceId = settingsRepository.getOrCreateManagedDeviceId()
-                    updateNotification("Provisioning Cloudflare hostname...")
-                    val provisioned = ManagedCloudflareProvisioner.provision(apiUrl, domain, deviceId)
-                    settingsRepository.setManagedCfProvisioning(provisioned.hostname, provisioned.runToken)
-                    TunnelResult.Success(provisioned.hostname)
-                }
-                TunnelProvider.CLOUDFLARE -> {
-                    cloudflareManager.startTunnel(port)
-                }
-                TunnelProvider.NGROK -> {
-                    val authToken = settingsRepository.ngrokAuthToken.first()
-                    ngrokManager.startTunnel(authToken, port)
-                }
-            }
-            
-            when (result) {
-                is TunnelResult.Success -> {
-                    _tunnelUrl.value = result.url
-                    _serviceState.value = ServiceState.Running(result.url)
-                    settingsRepository.setLastTunnelUrl(result.url)
-                    updateNotification("Connected: ${result.url}")
-                }
-                is TunnelResult.Error -> {
-                    _serviceState.value = ServiceState.Error(result.message)
-                    updateNotification("Error: ${result.message.lineSequence().firstOrNull().orEmpty()}")
+            try {
+                val provisioned = ManagedCloudflareProvisioner.provision(apiUrl, domain, deviceId)
+                settingsRepository.setManagedCfProvisioning(provisioned.hostname, provisioned.runToken)
+                
+                // Start cloudflared with the token
+                updateNotification("Starting Cloudflare tunnel...")
+                val tunnelResult = startCloudflaredWithToken(provisioned.runToken, port)
+                
+                if (tunnelResult != null) {
+                    _serviceState.value = ServiceState.Error(tunnelResult)
+                    updateNotification("Error: $tunnelResult")
                     ADBManager.disableTcpAdb()
                     stopSelf()
+                    return@launch
                 }
+                
+                val hostname = provisioned.hostname
+                _tunnelUrl.value = hostname
+                _serviceState.value = ServiceState.Running(hostname)
+                settingsRepository.setLastTunnelUrl(hostname)
+                updateNotification("Connected: $hostname")
+                
+            } catch (e: Exception) {
+                val error = e.message ?: "Failed to provision tunnel"
+                _serviceState.value = ServiceState.Error(error)
+                updateNotification("Error: ${error.lineSequence().firstOrNull().orEmpty()}")
+                ADBManager.disableTcpAdb()
+                stopSelf()
             }
         }
+    }
+    
+    private suspend fun startCloudflaredWithToken(token: String, port: Int): String? {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                // Get or download cloudflared binary
+                val cloudflaredFile = getOrDownloadCloudflared()
+                if (cloudflaredFile == null) {
+                    return@withContext "Could not get cloudflared binary"
+                }
+                
+                // Run: cloudflared tunnel run --token <token>
+                val processBuilder = ProcessBuilder(
+                    cloudflaredFile.absolutePath,
+                    "tunnel",
+                    "--no-autoupdate",
+                    "run",
+                    "--token", token
+                )
+                processBuilder.directory(filesDir)
+                processBuilder.redirectErrorStream(true)
+                
+                cloudflaredProcess = processBuilder.start()
+                
+                // Wait a bit and check if it's still running
+                kotlinx.coroutines.delay(3000)
+                
+                if (cloudflaredProcess?.isAlive != true) {
+                    val output = cloudflaredProcess?.inputStream?.bufferedReader()?.readText() ?: ""
+                    return@withContext "Cloudflared exited: ${output.take(200)}"
+                }
+                
+                null // Success
+            } catch (e: Exception) {
+                e.message ?: "Failed to start cloudflared"
+            }
+        }
+    }
+    
+    private fun getOrDownloadCloudflared(): java.io.File? {
+        val internalFile = java.io.File(filesDir, "cloudflared")
+        if (internalFile.exists() && internalFile.canExecute()) {
+            return internalFile
+        }
+        
+        // Try to extract from assets
+        try {
+            assets.open("cloudflared").use { input ->
+                internalFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            internalFile.setExecutable(true)
+            return internalFile
+        } catch (e: Exception) {
+            // Asset doesn't exist - would need to download
+        }
+        
+        return null
     }
     
     private fun stopAdbTunnel() {
         serviceScope.launch {
             _serviceState.value = ServiceState.Stopping
             
-            // Stop the appropriate tunnel
-            when (currentProvider) {
-                TunnelProvider.MANUAL -> Unit
-                TunnelProvider.CLOUDFLARE_MANAGED -> Unit
-                TunnelProvider.CLOUDFLARE -> cloudflareManager.stopTunnel()
-                TunnelProvider.NGROK -> ngrokManager.stopTunnel()
-            }
+            cloudflaredProcess?.destroy()
+            cloudflaredProcess = null
             ADBManager.disableTcpAdb()
             
             _tunnelUrl.value = null

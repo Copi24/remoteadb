@@ -25,33 +25,17 @@ import com.remoteadb.app.ui.components.GlowingCard
 import com.remoteadb.app.ui.components.GoldDivider
 import com.remoteadb.app.ui.components.GoldGradientButton
 import com.remoteadb.app.ui.theme.*
-import com.remoteadb.app.utils.CloudflareManager
-import com.remoteadb.app.utils.TunnelProvider
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    ngrokAuthToken: String,
     adbPort: String,
     autoStartOnBoot: Boolean,
-    tunnelProvider: TunnelProvider,
-    managedCfBaseDomain: String,
-    managedCfApiUrl: String,
-    onNgrokTokenChange: (String) -> Unit,
     onAdbPortChange: (String) -> Unit,
     onAutoStartChange: (Boolean) -> Unit,
-    onTunnelProviderChange: (TunnelProvider) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val scrollState = rememberScrollState()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    
-    var isDownloading by remember { mutableStateOf(false) }
-    var downloadProgress by remember { mutableStateOf(0) }
-    var downloadError by remember { mutableStateOf<String?>(null) }
-    var downloadSuccess by remember { mutableStateOf(false) }
     
     Box(
         modifier = Modifier
@@ -92,190 +76,47 @@ fun SettingsScreen(
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Tunnel Provider Selection
+                // Tunnel Info
                 SettingsSection(title = "Tunnel Provider") {
-                    listOf(TunnelProvider.CLOUDFLARE_MANAGED, TunnelProvider.MANUAL).forEach { provider ->
-                        val isSelected = tunnelProvider == provider
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .then(
-                                    if (isSelected) {
-                                        Modifier.border(2.dp, GoldPrimary, RoundedCornerShape(12.dp))
-                                    } else {
-                                        Modifier
-                                    }
-                                )
-                                .clickable { onTunnelProviderChange(provider) },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) DarkCard else DarkSurfaceVariant
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = { onTunnelProviderChange(provider) },
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = GoldPrimary,
-                                        unselectedColor = TextMuted
-                                    )
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = provider.displayName,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = if (isSelected) GoldPrimary else TextPrimary,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        text = provider.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextMuted
-                                    )
-                                }
-                            }
-                        }
-                        if (provider != TunnelProvider.MANUAL) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
-                }
-                
-                // Cloudflare (Managed) Configuration (if selected)
-                AnimatedVisibility(
-                    visible = tunnelProvider == TunnelProvider.CLOUDFLARE_MANAGED,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    SettingsSection(title = "Cloudflare (Managed)") {
-                        Text(
-                            text = "Creates a per-device hostname under your domain via your Worker/API, then you run cloudflared (Termux) using the returned token.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        SettingsInfoItem(
-                            icon = Icons.Outlined.Domain,
-                            title = "Base Domain",
-                            value = managedCfBaseDomain
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        SettingsInfoItem(
-                            icon = Icons.Outlined.Cloud,
-                            title = "Provisioning API",
-                            value = managedCfApiUrl
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "Security: protect this API with Cloudflare Access (JWT) + rate limits. Never put an account-wide API token in the app.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted
-                        )
-                    }
-                }
-
-                // Cloudflare Configuration (if selected)
-                AnimatedVisibility(
-                    visible = tunnelProvider == TunnelProvider.CLOUDFLARE,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    SettingsSection(title = "Cloudflare Setup") {
-                        Text(
-                            text = "Cloudflare quick tunnels are mainly for HTTP. ADB is raw TCP, so this option may never produce a usable endpoint.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "Recommended: switch to Manual mode and run your tunnel/VPN in Termux/PC.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = StatusActive
-                        )
-                    }
-                }
-                
-                // Ngrok Configuration (if selected)
-                AnimatedVisibility(
-                    visible = tunnelProvider == TunnelProvider.NGROK,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    SettingsSection(title = "Ngrok Configuration") {
-                        var tokenVisible by remember { mutableStateOf(false) }
-                        var editingToken by remember { mutableStateOf(ngrokAuthToken) }
-                        
-                        OutlinedTextField(
-                            value = editingToken,
-                            onValueChange = { editingToken = it },
-                            label = { Text("Auth Token") },
-                            placeholder = { Text("Enter your Ngrok auth token") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GoldPrimary,
-                                unfocusedBorderColor = GoldDark.copy(alpha = 0.5f),
-                                cursorColor = GoldPrimary,
-                                focusedLabelColor = GoldPrimary
-                            ),
-                            trailingIcon = {
-                                IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                                    Icon(
-                                        imageVector = if (tokenVisible) Icons.Default.VisibilityOff 
-                                            else Icons.Default.Visibility,
-                                        contentDescription = "Toggle visibility",
-                                        tint = GoldDark
-                                    )
-                                }
-                            },
-                            singleLine = true,
-                            visualTransformation = if (tokenVisible) 
-                                androidx.compose.ui.text.input.VisualTransformation.None 
-                            else 
-                                androidx.compose.ui.text.input.PasswordVisualTransformation()
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        GoldGradientButton(
-                            text = "Save Token",
-                            onClick = { onNgrokTokenChange(editingToken) },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = editingToken.isNotBlank() && editingToken != ngrokAuthToken,
-                            icon = Icons.Default.Save
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Text(
-                            text = "Get your free token at ngrok.com",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Text(
-                            text = "⚠️ Note: Free ngrok may have limited TCP tunnels",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = StatusPending
-                        )
-                    }
+                    Text(
+                        text = "Cloudflare Zero Trust Tunnels",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = GoldPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "Each device gets a unique hostname like abc123.676967.xyz. " +
+                               "Tunnels are automatically provisioned - no setup required!",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    SettingsInfoItem(
+                        icon = Icons.Outlined.Domain,
+                        title = "Domain",
+                        value = "676967.xyz"
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    SettingsInfoItem(
+                        icon = Icons.Outlined.Cloud,
+                        title = "Provider",
+                        value = "Cloudflare Zero Trust"
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    SettingsInfoItem(
+                        icon = Icons.Outlined.AttachMoney,
+                        title = "Cost",
+                        value = "Free (unlimited)"
+                    )
                 }
                 
                 // ADB Configuration
@@ -336,15 +177,7 @@ fun SettingsScreen(
                     SettingsInfoItem(
                         icon = Icons.Outlined.Info,
                         title = "Version",
-                        value = "1.1.0"
-                    )
-                    
-                    GoldDivider(modifier = Modifier.padding(vertical = 12.dp))
-                    
-                    SettingsInfoItem(
-                        icon = Icons.Outlined.Cloud,
-                        title = "Active Provider",
-                        value = tunnelProvider.displayName
+                        value = "2.0.0"
                     )
                     
                     GoldDivider(modifier = Modifier.padding(vertical = 12.dp))
