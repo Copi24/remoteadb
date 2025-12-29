@@ -25,13 +25,15 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        packages: 'build-tools;34.0.0'
+        packages: 'build-tools;33.0.1'
     
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
     - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --no-daemon
+      env:
+        ANDROID_HOME: /usr/local/lib/android/sdk
     
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
@@ -41,7 +43,9 @@ jobs:
         retention-days: 30
     
     - name: Build Release APK (unsigned)
-      run: ./gradlew assembleRelease
+      run: ./gradlew assembleRelease --no-daemon
+      env:
+        ANDROID_HOME: /usr/local/lib/android/sdk
     
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
