@@ -395,11 +395,36 @@ private fun SetupScreen(
         if (provider == TunnelProvider.CLOUDFLARE) {
             // Cloudflare setup
             Text(
-                text = "Cloudflare tunnels are completely FREE and require no account!",
+                text = "🎉 Cloudflare tunnels are completely FREE!",
                 style = MaterialTheme.typography.bodyLarge,
                 color = StatusActive,
                 textAlign = TextAlign.Center
             )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkCard)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "✓ No account needed",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = StatusActive
+                    )
+                    Text(
+                        text = "✓ No signup or payment required",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = StatusActive
+                    )
+                    Text(
+                        text = "✓ Works instantly",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = StatusActive
+                    )
+                }
+            }
             
             Spacer(modifier = Modifier.height(24.dp))
             
@@ -505,12 +530,30 @@ private fun SetupScreen(
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            Text(
-                text = "⚠️ Note: Free ngrok accounts have limited TCP tunnels",
-                style = MaterialTheme.typography.bodySmall,
-                color = StatusPending,
-                textAlign = TextAlign.Center
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = StatusPending.copy(alpha = 0.1f))
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "⚠️ Ngrok Limitations",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = StatusPending,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "• TCP tunnels may require a paid plan",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = "• Consider Cloudflare instead (100% free)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            }
         }
         
         Spacer(modifier = Modifier.weight(1f))

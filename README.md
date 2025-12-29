@@ -1,13 +1,13 @@
 # Remote ADB
 
-A stunning, polished Android app for remote ADB access over the internet using Ngrok tunneling.
+A stunning, polished Android app for remote ADB access over the internet using secure tunneling.
 
 ## ✨ Features
 
 - **🌐 Remote Access**: Access your Android device from anywhere via a secure URL
-- **🔒 Secure Tunneling**: Uses Ngrok's encrypted tunneling technology
+- **🔒 Secure Tunneling**: Choose between Cloudflare (free!) or Ngrok
 - **🎨 Gold Premium Design**: Beautiful Material 3 UI with gold accent theme
-- **⚡ Easy Setup**: Just paste your Ngrok token and connect
+- **⚡ Easy Setup**: Cloudflare requires no account - just connect!
 - **🚀 One-Tap Connect**: Start/stop the tunnel with a single tap
 - **📋 Copy URL**: Easily copy the tunnel URL to clipboard
 - **🔄 Auto-start**: Option to automatically start tunnel on device boot
@@ -16,30 +16,41 @@ A stunning, polished Android app for remote ADB access over the internet using N
 ## 📋 Requirements
 
 - Android 7.0+ (API 24+)
-- Rooted device
-- Ngrok account (free tier works!)
+- Rooted device (Magisk, KernelSU, etc.)
 
 ## 🚀 Setup
+
+### Option 1: Cloudflare (Recommended - 100% FREE)
+
+1. **Install the App**
+   - Download the APK from [Releases](../../releases) or build it yourself
+   - Grant root access when prompted
+
+2. **Download Cloudflared**
+   - The app will prompt you to download the cloudflared binary
+   - This is a one-time ~25MB download
+
+3. **Connect**
+   - Tap "Connect" on the home screen
+   - Wait for the tunnel URL to appear
+   - Use the URL on any computer:
+     ```bash
+     adb connect your-tunnel-url.trycloudflare.com:port
+     ```
+
+### Option 2: Ngrok (Requires Account)
 
 1. **Get Ngrok Token**
    - Sign up at [ngrok.com](https://ngrok.com)
    - Copy your auth token from the dashboard
+   - Note: TCP tunnels may require a paid plan
 
-2. **Install the App**
-   - Download and install the APK
-   - Grant root access when prompted
+2. **Configure**
+   - Select Ngrok during onboarding
+   - Paste your auth token
 
-3. **Configure**
-   - Paste your Ngrok auth token during onboarding
-   - Or go to Settings to add it later
-
-4. **Connect**
-   - Tap "Connect" on the home screen
-   - Wait for the tunnel URL to appear
-   - Copy the URL and use it on any computer:
-     ```bash
-     adb connect tcp://0.tcp.ngrok.io:12345
-     ```
+3. **Connect**
+   - Tap "Connect" and use the provided URL
 
 ## 🎨 Design
 
@@ -51,12 +62,15 @@ A stunning, polished Android app for remote ADB access over the internet using N
 
 ## 🛠️ Building
 
+### Local Build
 ```bash
-cd remoteadb
 ./gradlew assembleDebug
 ```
 
 The APK will be at `app/build/outputs/apk/debug/app-debug.apk`
+
+### GitHub Actions
+This repo includes a GitHub Actions workflow that automatically builds APKs on push. Download artifacts from the Actions tab.
 
 ## 📄 License
 
@@ -65,4 +79,4 @@ MIT License - Open Source
 ## 🙏 Credits
 
 - Built with Kotlin + Jetpack Compose
-- Tunneling powered by [Ngrok](https://ngrok.com)
+- Tunneling powered by [Cloudflare](https://cloudflare.com) and [Ngrok](https://ngrok.com)

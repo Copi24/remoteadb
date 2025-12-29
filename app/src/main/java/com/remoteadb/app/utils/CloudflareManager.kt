@@ -11,6 +11,11 @@ import java.net.URL
 /**
  * Cloudflare Tunnel Manager
  * Uses cloudflared to create TCP tunnels - FREE and no account required!
+ * 
+ * Key benefits over Ngrok:
+ * - 100% free, no payment required
+ * - No account or signup needed
+ * - Unlimited usage
  */
 class CloudflareManager(private val context: Context) {
     
@@ -18,6 +23,14 @@ class CloudflareManager(private val context: Context) {
     private var tunnelUrl: String? = null
     private var lastError: String? = null
     private var processOutput = StringBuilder()
+    
+    /**
+     * Check if cloudflared binary is available and ready to use
+     */
+    fun isCloudflaredAvailable(): Boolean {
+        val binary = getCloudflaredBinary()
+        return binary != null && binary.exists() && binary.canExecute()
+    }
     
     suspend fun startTunnel(port: Int = 5555): TunnelResult = withContext(Dispatchers.IO) {
         try {
@@ -28,14 +41,16 @@ class CloudflareManager(private val context: Context) {
             val cloudflaredFile = getCloudflaredBinary()
             if (cloudflaredFile == null || !cloudflaredFile.exists()) {
                 return@withContext TunnelResult.Error(
-                    "Cloudflared not found. Please download it from the app or place it in app files directory."
+                    "Cloudflared binary not found.\n\nPlease go to Settings and download it first, or restart the app to complete setup."
                 )
             }
             
             if (!cloudflaredFile.canExecute()) {
                 cloudflaredFile.setExecutable(true)
                 if (!cloudflaredFile.canExecute()) {
-                    return@withContext TunnelResult.Error("Cannot execute cloudflared binary")
+                    return@withContext TunnelResult.Error(
+                        "Cannot execute cloudflared binary.\n\nTry re-downloading from Settings."
+                    )
                 }
             }
             
