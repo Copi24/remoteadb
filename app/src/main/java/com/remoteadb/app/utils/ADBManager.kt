@@ -1,5 +1,16 @@
 package com.remoteadb.app.utils
 
+import com.remoteadb.app.shizuku.ShizukuManager
+
+/**
+ * Execution mode for ADB commands.
+ */
+enum class ExecutionMode {
+    ROOT,      // Use su for root access
+    SHIZUKU,   // Use Shizuku for ADB-level shell access
+    NONE       // No elevated access available
+}
+
 object ADBManager {
     
     data class AdbResult(
@@ -7,13 +18,47 @@ object ADBManager {
         val error: String? = null
     )
     
-    suspend fun enableTcpAdb(port: Int = 5555): AdbResult {
-        // First check if we have root access
-        val rootCheck = ShellExecutor.checkRootAccess()
-        if (!rootCheck) {
-            return AdbResult(false, "Root access denied. Please grant root permission.")
+    /**
+     * Detect the best available execution mode.
+     */
+    suspend fun detectExecutionMode(): ExecutionMode {
+        // First try root
+        if (ShellExecutor.checkRootAccess()) {
+            return ExecutionMode.ROOT
         }
         
+        // Then try Shizuku
+        if (ShizukuManager.isAvailable.value) {
+            return ExecutionMode.SHIZUKU
+        }
+        
+        return ExecutionMode.NONE
+    }
+    
+    /**
+     * Check if we have any elevated access (root or Shizuku).
+     */
+    suspend fun hasElevatedAccess(): Boolean {
+        return detectExecutionMode() != ExecutionMode.NONE
+    }
+    
+    suspend fun enableTcpAdb(port: Int = 5555): AdbResult {
+        val mode = detectExecutionMode()
+        
+        return when (mode) {
+            ExecutionMode.ROOT -> enableTcpAdbWithRoot(port)
+            ExecutionMode.SHIZUKU -> enableTcpAdbWithShizuku(port)
+            ExecutionMode.NONE -> AdbResult(
+                false, 
+                "No elevated access available.\n\n" +
+                "Either:\n" +
+                "• Grant ROOT access (Magisk/KernelSU), or\n" +
+                "• Install Shizuku from Play Store and enable it"
+            )
+        }
+    }
+    
+    private suspend fun enableTcpAdbWithRoot(port: Int): AdbResult {
         // Set the TCP port
         val setPortResult = ShellExecutor.executeAsRoot("setprop service.adb.tcp.port $port")
         if (!setPortResult.success) {
@@ -48,18 +93,61 @@ object ADBManager {
         return AdbResult(true)
     }
     
+    private fun enableTcpAdbWithShizuku(port: Int): AdbResult {
+        // Use Shizuku to execute commands with ADB-level (shell) privileges
+        val setPort = ShizukuManager.executeCommand("setprop service.adb.tcp.port $port")
+        if (setPort.exitCode != 0) {
+            return AdbResult(false, "Failed to set ADB port via Shizuku: ${setPort.stderr}")
+        }
+        
+        // Restart adbd
+        val stop = ShizukuManager.executeCommand("stop adbd")
+        if (stop.exitCode != 0) {
+            return AdbResult(false, "Failed to stop adbd via Shizuku: ${stop.stderr}")
+        }
+        
+        Thread.sleep(500)
+        
+        val start = ShizukuManager.executeCommand("start adbd")
+        if (start.exitCode != 0) {
+            return AdbResult(false, "Failed to start adbd via Shizuku: ${start.stderr}")
+        }
+        
+        Thread.sleep(1000)
+        
+        // Verify
+        val verify = ShizukuManager.executeCommand("getprop service.adb.tcp.port")
+        val actualPort = verify.stdout.trim().toIntOrNull() ?: -1
+        
+        if (actualPort != port) {
+            return AdbResult(false, "ADB port not set correctly. Expected $port, got $actualPort")
+        }
+        
+        return AdbResult(true)
+    }
+    
     suspend fun disableTcpAdb(): Boolean {
-        val result = ShellExecutor.executeAsRoot("setprop service.adb.tcp.port -1 && stop adbd && start adbd")
-        return result.success
+        val mode = detectExecutionMode()
+        return when (mode) {
+            ExecutionMode.ROOT -> {
+                ShellExecutor.executeAsRoot("setprop service.adb.tcp.port -1 && stop adbd && start adbd").success
+            }
+            ExecutionMode.SHIZUKU -> {
+                ShizukuManager.executeCommand("setprop service.adb.tcp.port -1").exitCode == 0 &&
+                ShizukuManager.executeCommand("stop adbd").exitCode == 0 &&
+                ShizukuManager.executeCommand("start adbd").exitCode == 0
+            }
+            ExecutionMode.NONE -> false
+        }
     }
     
     suspend fun isAdbTcpEnabled(): Boolean {
-        val result = ShellExecutor.executeAsRoot("getprop service.adb.tcp.port")
+        val result = ShellExecutor.execute("getprop service.adb.tcp.port")
         return result.success && result.output.trim().toIntOrNull()?.let { it > 0 } ?: false
     }
     
     suspend fun getAdbTcpPort(): Int {
-        val result = ShellExecutor.executeAsRoot("getprop service.adb.tcp.port")
+        val result = ShellExecutor.execute("getprop service.adb.tcp.port")
         return result.output.trim().toIntOrNull() ?: -1
     }
     

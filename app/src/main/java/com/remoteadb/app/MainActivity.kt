@@ -22,12 +22,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.remoteadb.app.service.ADBService
 import com.remoteadb.app.service.ServiceState
+import com.remoteadb.app.shizuku.ShizukuManager
 import com.remoteadb.app.ui.screens.HomeScreen
 import com.remoteadb.app.ui.screens.OnboardingScreen
 import com.remoteadb.app.ui.screens.SettingsScreen
 import com.remoteadb.app.ui.theme.RemoteADBTheme
 import com.remoteadb.app.utils.ADBManager
 import com.remoteadb.app.utils.DeviceInfo
+import com.remoteadb.app.utils.ExecutionMode
 import com.remoteadb.app.utils.SettingsRepository
 import com.remoteadb.app.utils.ShellExecutor
 import kotlinx.coroutines.flow.first
@@ -61,6 +63,16 @@ class MainActivity : ComponentActivity() {
         
         settingsRepository = SettingsRepository(this)
         
+        // Initialize Shizuku manager
+        val appInfo = packageManager.getPackageInfo(packageName, 0)
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            appInfo.longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION")
+            appInfo.versionCode
+        }
+        ShizukuManager.init(packageName, versionCode)
+        
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
@@ -92,6 +104,11 @@ class MainActivity : ComponentActivity() {
             serviceBound = false
         }
     }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        ShizukuManager.destroy()
+    }
 }
 
 @OptIn(ExperimentalAnimationApi::class)
@@ -108,10 +125,14 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     var managedCfRunToken by remember { mutableStateOf("") }
     var deviceInfo by remember { mutableStateOf<DeviceInfo?>(null) }
     var localIp by remember { mutableStateOf<String?>(null) }
-    var hasRootAccess by remember { mutableStateOf(false) }
+    var executionMode by remember { mutableStateOf(ExecutionMode.NONE) }
     var lastError by remember { mutableStateOf("") }
     var serviceState by remember { mutableStateOf<ServiceState>(ServiceState.Stopped) }
     var tunnelUrl by remember { mutableStateOf<String?>(null) }
+    
+    // Collect Shizuku state
+    val shizukuState by ShizukuManager.state.collectAsState()
+    val shizukuAvailable by ShizukuManager.isAvailable.collectAsState()
     
     // Load initial settings
     LaunchedEffect(Unit) {
@@ -124,9 +145,16 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
         lastError = settingsRepository.lastError.first()
         
         // Load device info
-        hasRootAccess = ShellExecutor.checkRootAccess()
         deviceInfo = ADBManager.getDeviceInfo()
         localIp = ADBManager.getLocalIpAddress()
+        
+        // Detect execution mode
+        executionMode = ADBManager.detectExecutionMode()
+    }
+    
+    // Re-detect execution mode when Shizuku state changes
+    LaunchedEffect(shizukuAvailable) {
+        executionMode = ADBManager.detectExecutionMode()
     }
     
     // Collect settings changes
@@ -192,7 +220,11 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                 deviceInfo = deviceInfo,
                 localIp = localIp,
                 adbPort = adbPort,
-                hasRootAccess = hasRootAccess,
+                executionMode = executionMode,
+                shizukuState = shizukuState,
+                onRequestShizukuPermission = {
+                    ShizukuManager.requestPermission()
+                },
                 onToggleService = {
                     if (serviceState is ServiceState.Running) {
                         ADBService.stopService(context)

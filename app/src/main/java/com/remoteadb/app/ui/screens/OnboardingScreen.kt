@@ -31,8 +31,7 @@ data class OnboardingPage(
     val icon: ImageVector,
     val title: String,
     val description: String,
-    val gradient: List<Color>,
-    val codeSnippet: String? = null
+    val gradient: List<Color>
 )
 
 @OptIn(ExperimentalAnimationApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -46,27 +45,20 @@ fun OnboardingScreen(
         OnboardingPage(
             icon = Icons.Default.PhoneAndroid,
             title = "Remote ADB",
-            description = "Access your Android device from anywhere! Debug apps, transfer files, and run commands remotely.",
+            description = "Access your Android device from anywhere in the world! Debug apps, transfer files, and run commands remotely over the internet.",
             gradient = listOf(GoldPrimary, GoldDark)
         ),
         OnboardingPage(
             icon = Icons.Default.Security,
-            title = "Root or Shizuku",
-            description = "Works with ROOT (Magisk/KernelSU) for full ADB, or with Shizuku for shell access without root!",
+            title = "ROOT or Shizuku",
+            description = "Works with ROOT (Magisk/KernelSU) for full access.\n\nNo root? Install Shizuku from Play Store for ADB-level shell access without root!",
             gradient = listOf(GoldLight, GoldPrimary)
         ),
         OnboardingPage(
-            icon = Icons.Default.Laptop,
-            title = "Connect from PC",
-            description = "After tapping Connect, run this on your PC (it installs cloudflared if needed):",
-            gradient = listOf(GoldDark, GoldPrimary),
-            codeSnippet = "curl -sL 676967.xyz/c | bash -s YOUR_ID\nadb connect localhost:5555"
-        ),
-        OnboardingPage(
             icon = Icons.Default.RocketLaunch,
-            title = "Ready!",
-            description = "That's it! No accounts, no config. Just tap Connect and you're ready to debug from anywhere.",
-            gradient = listOf(GoldPrimary, GoldLight)
+            title = "Zero Config",
+            description = "No accounts, no sign-up, no configuration needed.\n\nJust tap Connect on your phone, then run a simple command on your PC. That's it!",
+            gradient = listOf(GoldDark, GoldPrimary)
         )
     )
     
@@ -229,40 +221,6 @@ private fun OnboardingPageContent(page: OnboardingPage) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-        
-        if (page.codeSnippet != null) {
-            Spacer(modifier = Modifier.height(20.dp))
-            
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF1a1a1a),
-                border = androidx.compose.foundation.BorderStroke(1.dp, GoldDark.copy(alpha = 0.3f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = page.codeSnippet,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        color = GoldLight,
-                        lineHeight = 20.sp
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = "Replace YOUR_ID with your device ID shown after connecting",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
-            )
-        }
     }
 }
 

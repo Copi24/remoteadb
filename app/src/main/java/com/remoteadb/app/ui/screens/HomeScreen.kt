@@ -3,6 +3,8 @@ package com.remoteadb.app.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -35,9 +37,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.remoteadb.app.service.ServiceState
+import com.remoteadb.app.shizuku.ShizukuManager
 import com.remoteadb.app.ui.components.*
 import com.remoteadb.app.ui.theme.*
 import com.remoteadb.app.utils.DeviceInfo
+import com.remoteadb.app.utils.ExecutionMode
 
 @Composable
 fun HomeScreen(
@@ -46,7 +50,9 @@ fun HomeScreen(
     deviceInfo: DeviceInfo?,
     localIp: String?,
     adbPort: String,
-    hasRootAccess: Boolean,
+    executionMode: ExecutionMode,
+    shizukuState: ShizukuManager.ShizukuState,
+    onRequestShizukuPermission: () -> Unit,
     onToggleService: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
@@ -55,6 +61,7 @@ fun HomeScreen(
     
     val isConnected = serviceState is ServiceState.Running
     val isLoading = serviceState is ServiceState.Starting || serviceState is ServiceState.Stopping
+    val canConnect = executionMode != ExecutionMode.NONE
     
     Box(
         modifier = Modifier
@@ -87,12 +94,36 @@ fun HomeScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
+            // Permission status card (if no access)
+            if (!canConnect) {
+                PermissionRequiredCard(
+                    shizukuState = shizukuState,
+                    onRequestShizukuPermission = onRequestShizukuPermission,
+                    onOpenShizukuApp = {
+                        try {
+                            val intent = context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                            if (intent != null) {
+                                context.startActivity(intent)
+                            } else {
+                                // Open Play Store
+                                val playIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api"))
+                                context.startActivity(playIntent)
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Please install Shizuku from Play Store", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+            
             // Main status card
             MainStatusCard(
                 serviceState = serviceState,
                 tunnelUrl = tunnelUrl,
                 isConnected = isConnected,
                 isLoading = isLoading,
+                canConnect = canConnect,
                 onToggle = onToggleService,
                 onCopyUrl = { url ->
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -115,7 +146,11 @@ fun HomeScreen(
             
             // Device info card
             deviceInfo?.let {
-                DeviceInfoCard(deviceInfo = it, hasRootAccess = hasRootAccess)
+                DeviceInfoCard(
+                    deviceInfo = it, 
+                    executionMode = executionMode,
+                    shizukuState = shizukuState
+                )
                 Spacer(modifier = Modifier.height(20.dp))
             }
             
@@ -123,6 +158,106 @@ fun HomeScreen(
             QuickActionsCard()
             
             Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun PermissionRequiredCard(
+    shizukuState: ShizukuManager.ShizukuState,
+    onRequestShizukuPermission: () -> Unit,
+    onOpenShizukuApp: () -> Unit
+) {
+    GlowingCard(
+        modifier = Modifier.fillMaxWidth(),
+        isActive = false
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = StatusPending
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                text = "Elevated Access Required",
+                style = MaterialTheme.typography.titleMedium,
+                color = GoldPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "This app needs ROOT or Shizuku to enable wireless ADB.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            when (shizukuState) {
+                is ShizukuManager.ShizukuState.NotInstalled -> {
+                    Text(
+                        text = "Shizuku is not installed. Install it from Play Store for non-root access.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    GoldGradientButton(
+                        text = "Get Shizuku",
+                        onClick = onOpenShizukuApp,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Default.GetApp
+                    )
+                }
+                is ShizukuManager.ShizukuState.NotRunning -> {
+                    Text(
+                        text = "Shizuku is installed but not running. Open Shizuku app and start it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    GoldGradientButton(
+                        text = "Open Shizuku",
+                        onClick = onOpenShizukuApp,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Default.OpenInNew
+                    )
+                }
+                is ShizukuManager.ShizukuState.NoPermission -> {
+                    Text(
+                        text = "Shizuku is running! Tap to grant permission.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = StatusActive,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    GoldGradientButton(
+                        text = "Grant Shizuku Permission",
+                        onClick = onRequestShizukuPermission,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Default.Security
+                    )
+                }
+                else -> {
+                    Text(
+                        text = "Grant ROOT access or install Shizuku.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         }
     }
 }
@@ -172,6 +307,7 @@ private fun MainStatusCard(
     tunnelUrl: String?,
     isConnected: Boolean,
     isLoading: Boolean,
+    canConnect: Boolean,
     onToggle: () -> Unit,
     onCopyUrl: (String) -> Unit
 ) {
@@ -378,14 +514,16 @@ private fun MainStatusCard(
             // Toggle button
             GoldGradientButton(
                 text = when {
+                    !canConnect -> "Setup Required"
                     isLoading -> "Please wait..."
                     isConnected -> "Disconnect"
                     else -> "Connect"
                 },
                 onClick = onToggle,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading,
+                enabled = canConnect && !isLoading,
                 icon = when {
+                    !canConnect -> Icons.Default.Lock
                     isLoading -> Icons.Default.HourglassEmpty
                     isConnected -> Icons.Default.Stop
                     else -> Icons.Default.PlayArrow
@@ -441,7 +579,8 @@ private fun ConnectionInfoCard(
 @Composable
 private fun DeviceInfoCard(
     deviceInfo: DeviceInfo,
-    hasRootAccess: Boolean
+    executionMode: ExecutionMode,
+    shizukuState: ShizukuManager.ShizukuState
 ) {
     GlowingCard(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -470,10 +609,27 @@ private fun DeviceInfoCard(
         Spacer(modifier = Modifier.height(12.dp))
         
         InfoRow(
-            icon = if (hasRootAccess) Icons.Outlined.Security else Icons.Outlined.Warning,
-            label = "Root Access",
-            value = if (hasRootAccess) "Granted" else "Not Available",
-            valueColor = if (hasRootAccess) StatusActive else StatusInactive
+            icon = when (executionMode) {
+                ExecutionMode.ROOT -> Icons.Outlined.Security
+                ExecutionMode.SHIZUKU -> Icons.Outlined.Verified
+                ExecutionMode.NONE -> Icons.Outlined.Warning
+            },
+            label = "Access Mode",
+            value = when (executionMode) {
+                ExecutionMode.ROOT -> "ROOT"
+                ExecutionMode.SHIZUKU -> "Shizuku"
+                ExecutionMode.NONE -> when (shizukuState) {
+                    is ShizukuManager.ShizukuState.NotInstalled -> "None (Install Shizuku)"
+                    is ShizukuManager.ShizukuState.NotRunning -> "None (Start Shizuku)"
+                    is ShizukuManager.ShizukuState.NoPermission -> "None (Grant Permission)"
+                    else -> "None"
+                }
+            },
+            valueColor = when (executionMode) {
+                ExecutionMode.ROOT -> StatusActive
+                ExecutionMode.SHIZUKU -> StatusActive
+                ExecutionMode.NONE -> StatusInactive
+            }
         )
     }
 }

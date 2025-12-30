@@ -180,7 +180,23 @@ class ADBService : Service() {
                     input.copyTo(output)
                 }
             }
-            internalFile.setExecutable(true)
+            // Try Java setExecutable first
+            if (!internalFile.setExecutable(true, false)) {
+                android.util.Log.w("ADBService", "Java setExecutable failed, trying chmod")
+            }
+            // Also use chmod via shell as fallback (works better on some devices)
+            try {
+                val chmod = Runtime.getRuntime().exec(arrayOf("chmod", "755", internalFile.absolutePath))
+                chmod.waitFor()
+            } catch (e: Exception) {
+                android.util.Log.w("ADBService", "chmod fallback failed", e)
+            }
+            
+            if (!internalFile.canExecute()) {
+                android.util.Log.e("ADBService", "cloudflared is not executable after chmod")
+                return null
+            }
+            
             internalFile
         } catch (e: Exception) {
             android.util.Log.e("ADBService", "Missing cloudflared asset", e)
