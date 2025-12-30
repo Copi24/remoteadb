@@ -79,15 +79,13 @@ jobs:
           api="https://api.cloudflare.com/client/v4"
           
           # Create DNS records for both api.676967.xyz and 676967.xyz (root)
-          for record in "api:api.676967.xyz" "@:676967.xyz"; do
-            name="${record%%:*}"
-            hostname="${record##*:}"
-            
+          # (dummy proxied A records are enough for Workers Routes)
+          for hostname in "api.676967.xyz" "676967.xyz"; do
             dns_json=$(curl -fsS -H "Authorization: Bearer ${CF_API_TOKEN}" \
               "${api}/zones/${CF_ZONE_ID}/dns_records?type=A&name=${hostname}")
             existing_id=$(echo "$dns_json" | jq -r ".result[0].id // empty")
 
-            dns_body="{\"type\":\"A\",\"name\":\"${name}\",\"content\":\"192.0.2.1\",\"ttl\":1,\"proxied\":true}"
+            dns_body="{\"type\":\"A\",\"name\":\"${hostname}\",\"content\":\"192.0.2.1\",\"ttl\":1,\"proxied\":true}"
 
             if [ -z "${existing_id}" ]; then
               curl -fsS -X POST -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \

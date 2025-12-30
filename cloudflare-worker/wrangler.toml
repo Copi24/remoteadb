@@ -1,4 +1,4 @@
-name = "remoteadb-provisioner"
+name = "remoteadb-provision"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
@@ -7,9 +7,3 @@ compatibility_date = "2024-01-01"
 
 [vars]
 CF_DNS_SUFFIX = "676967.xyz"
-
-# Custom domain route - requires setting up in Cloudflare dashboard
-# or via: wrangler deploy && wrangler route add 'api.676967.xyz/*'
-routes = [
-  { pattern = "api.676967.xyz", custom_domain = true }
-]

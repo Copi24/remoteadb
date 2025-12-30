@@ -12,7 +12,12 @@ data class ManagedCfProvisionResponse(
 
 object ManagedCloudflareProvisioner {
 
-    suspend fun provision(apiUrl: String, baseDomain: String, deviceId: String): ManagedCfProvisionResponse =
+    suspend fun provision(
+        apiUrl: String,
+        baseDomain: String,
+        deviceId: String,
+        adbPort: Int
+    ): ManagedCfProvisionResponse =
         withContext(Dispatchers.IO) {
             val url = URL(apiUrl)
             val conn = (url.openConnection() as HttpURLConnection).apply {
@@ -23,7 +28,7 @@ object ManagedCloudflareProvisioner {
                 setRequestProperty("Content-Type", "application/json")
             }
 
-            val payload = "{\"deviceId\":\"$deviceId\",\"baseDomain\":\"$baseDomain\"}"
+            val payload = "{\"deviceId\":\"$deviceId\",\"baseDomain\":\"$baseDomain\",\"adbPort\":$adbPort}"
             conn.outputStream.use { it.write(payload.toByteArray()) }
 
             val code = conn.responseCode

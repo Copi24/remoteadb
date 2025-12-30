@@ -14,6 +14,11 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
+        // The shipped cloudflared binary is built for Android arm64.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+
         vectorDrawables {
             useSupportLibrary = true
         }

@@ -24,6 +24,7 @@ object PreferencesKeys {
     val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     val AUTO_START_ON_BOOT = booleanPreferencesKey("auto_start_on_boot")
     val LAST_TUNNEL_URL = stringPreferencesKey("last_tunnel_url")
+    val LAST_ERROR = stringPreferencesKey("last_error")
     val ADB_PORT = stringPreferencesKey("adb_port")
 
     // Managed Cloudflare (provisioned by Worker at api.676967.xyz)
@@ -48,7 +49,12 @@ class SettingsRepository(private val context: Context) {
         .map { preferences ->
             preferences[PreferencesKeys.LAST_TUNNEL_URL] ?: ""
         }
-    
+
+    val lastError: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.LAST_ERROR] ?: ""
+        }
+
     val adbPort: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.ADB_PORT] ?: "5555"
@@ -79,6 +85,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setLastTunnelUrl(url: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.LAST_TUNNEL_URL] = url
+        }
+    }
+
+    suspend fun setLastError(message: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LAST_ERROR] = message
         }
     }
     

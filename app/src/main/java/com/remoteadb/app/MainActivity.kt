@@ -109,6 +109,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     var deviceInfo by remember { mutableStateOf<DeviceInfo?>(null) }
     var localIp by remember { mutableStateOf<String?>(null) }
     var hasRootAccess by remember { mutableStateOf(false) }
+    var lastError by remember { mutableStateOf("") }
     var serviceState by remember { mutableStateOf<ServiceState>(ServiceState.Stopped) }
     var tunnelUrl by remember { mutableStateOf<String?>(null) }
     
@@ -120,6 +121,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
         managedCfHostname = settingsRepository.managedCfHostname.first()
         managedCfRunToken = settingsRepository.managedCfRunToken.first()
         tunnelUrl = settingsRepository.lastTunnelUrl.first().takeIf { it.isNotEmpty() }
+        lastError = settingsRepository.lastError.first()
         
         // Load device info
         hasRootAccess = ShellExecutor.checkRootAccess()
@@ -139,6 +141,9 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     }
     LaunchedEffect(Unit) {
         settingsRepository.managedCfRunToken.collect { managedCfRunToken = it }
+    }
+    LaunchedEffect(Unit) {
+        settingsRepository.lastError.collect { lastError = it }
     }
     
     // Determine start destination
@@ -204,6 +209,14 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                             // Poll for tunnel URL
                             repeat(30) { // Wait up to 30 seconds
                                 kotlinx.coroutines.delay(1000)
+
+                                val err = settingsRepository.lastError.first()
+                                if (err.isNotEmpty()) {
+                                    tunnelUrl = null
+                                    serviceState = ServiceState.Error(err)
+                                    return@launch
+                                }
+
                                 val url = settingsRepository.lastTunnelUrl.first()
                                 if (url.isNotEmpty()) {
                                     tunnelUrl = url
@@ -212,7 +225,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                                 }
                             }
                             // Timeout
-                            serviceState = ServiceState.Error("Timeout - check logs in notification")
+                            serviceState = ServiceState.Error("Timeout - check notification for details")
                         }
                     }
                 },

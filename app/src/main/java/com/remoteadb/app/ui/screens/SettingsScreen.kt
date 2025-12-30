@@ -115,7 +115,7 @@ fun SettingsScreen(
                     SettingsInfoItem(
                         icon = Icons.Outlined.AttachMoney,
                         title = "Cost",
-                        value = "Free (unlimited)"
+                        value = "Free (Cloudflare Free plan)"
                     )
                 }
                 

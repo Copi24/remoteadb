@@ -491,10 +491,10 @@ private fun QuickActionsCard() {
         Spacer(modifier = Modifier.height(16.dp))
         
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            StepItem(number = 1, text = "Click 'Connect' to start the tunnel")
-            StepItem(number = 2, text = "Copy the remote URL")
-            StepItem(number = 3, text = "Run: adb connect <url>")
-            StepItem(number = 4, text = "You're connected remotely!")
+            StepItem(number = 1, text = "Tap 'Connect' on your phone")
+            StepItem(number = 2, text = "On your PC: run the curl command shown above")
+            StepItem(number = 3, text = "Then: adb connect localhost:5555")
+            StepItem(number = 4, text = "Keep the tunnel running (Ctrl+C to stop)")
         }
     }
 }

@@ -58,7 +58,7 @@ fun OnboardingScreen(
         OnboardingPage(
             icon = Icons.Default.Laptop,
             title = "Connect from PC",
-            description = "After tapping Connect, run this on your PC:",
+            description = "After tapping Connect, run this on your PC (it installs cloudflared if needed):",
             gradient = listOf(GoldDark, GoldPrimary),
             codeSnippet = "curl -sL 676967.xyz/c | bash -s YOUR_ID\nadb connect localhost:5555"
         ),

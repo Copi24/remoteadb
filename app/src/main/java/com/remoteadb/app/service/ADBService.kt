@@ -67,7 +67,10 @@ class ADBService : Service() {
     private fun startAdbTunnel() {
         serviceScope.launch {
             _serviceState.value = ServiceState.Starting
-            
+
+            settingsRepository.setLastError("")
+            settingsRepository.setLastTunnelUrl("")
+
             startForeground(NOTIFICATION_ID, createNotification("Starting ADB tunnel..."))
             
             val port = settingsRepository.adbPort.first().toIntOrNull() ?: 5555
@@ -76,7 +79,9 @@ class ADBService : Service() {
             updateNotification("Enabling ADB over TCP...")
             val adbResult = ADBManager.enableTcpAdb(port)
             if (!adbResult.success) {
-                _serviceState.value = ServiceState.Error(adbResult.error ?: "Failed to enable ADB over TCP")
+                val msg = adbResult.error ?: "Failed to enable ADB over TCP"
+                settingsRepository.setLastError(msg)
+                _serviceState.value = ServiceState.Error(msg)
                 stopSelf()
                 return@launch
             }
@@ -91,7 +96,7 @@ class ADBService : Service() {
             val deviceId = settingsRepository.getOrCreateManagedDeviceId()
             
             try {
-                val provisioned = ManagedCloudflareProvisioner.provision(apiUrl, domain, deviceId)
+                val provisioned = ManagedCloudflareProvisioner.provision(apiUrl, domain, deviceId, port)
                 settingsRepository.setManagedCfProvisioning(provisioned.hostname, provisioned.runToken)
                 
                 // Start cloudflared with the token
@@ -99,6 +104,7 @@ class ADBService : Service() {
                 val tunnelResult = startCloudflaredWithToken(provisioned.runToken, port)
                 
                 if (tunnelResult != null) {
+                    settingsRepository.setLastError(tunnelResult)
                     _serviceState.value = ServiceState.Error(tunnelResult)
                     updateNotification("Error: $tunnelResult")
                     ADBManager.disableTcpAdb()
@@ -109,11 +115,13 @@ class ADBService : Service() {
                 val hostname = provisioned.hostname
                 _tunnelUrl.value = hostname
                 _serviceState.value = ServiceState.Running(hostname)
+                settingsRepository.setLastError("")
                 settingsRepository.setLastTunnelUrl(hostname)
                 updateNotification("Connected: $hostname")
                 
             } catch (e: Exception) {
                 val error = e.message ?: "Failed to provision tunnel"
+                settingsRepository.setLastError(error)
                 _serviceState.value = ServiceState.Error(error)
                 updateNotification("Error: ${error.lineSequence().firstOrNull().orEmpty()}")
                 ADBManager.disableTcpAdb()
@@ -165,34 +173,19 @@ class ADBService : Service() {
             return internalFile
         }
         
-        // Try to extract from assets first
-        try {
+        // Extract from assets (we ship an Android-compatible cloudflared binary)
+        return try {
             assets.open("cloudflared").use { input ->
                 internalFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
             internalFile.setExecutable(true)
-            return internalFile
+            internalFile
         } catch (e: Exception) {
-            // Asset doesn't exist - download it
+            android.util.Log.e("ADBService", "Missing cloudflared asset", e)
+            null
         }
-        
-        // Download cloudflared binary for Android arm64
-        try {
-            val url = java.net.URL("https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64")
-            url.openStream().use { input ->
-                internalFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            internalFile.setExecutable(true)
-            return internalFile
-        } catch (e: Exception) {
-            android.util.Log.e("ADBService", "Failed to download cloudflared", e)
-        }
-        
-        return null
     }
     
     private fun stopAdbTunnel() {
@@ -202,7 +195,10 @@ class ADBService : Service() {
             cloudflaredProcess?.destroy()
             cloudflaredProcess = null
             ADBManager.disableTcpAdb()
-            
+
+            settingsRepository.setLastTunnelUrl("")
+            settingsRepository.setLastError("")
+
             _tunnelUrl.value = null
             _serviceState.value = ServiceState.Stopped
             
