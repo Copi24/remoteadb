@@ -1,10 +1,8 @@
 package com.remoteadb.app.utils
 
-import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
-import java.io.File
 import java.io.InputStreamReader
 
 object ShellExecutor {
@@ -92,18 +90,6 @@ object ShellExecutor {
         }
     }
     
-    fun extractNgrokBinary(context: Context): File {
-        val ngrokFile = File(context.filesDir, "ngrok")
-        if (!ngrokFile.exists()) {
-            context.assets.open("ngrok").use { input ->
-                ngrokFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            ngrokFile.setExecutable(true)
-        }
-        return ngrokFile
-    }
 }
 
 data class ShellResult(

@@ -15,7 +15,7 @@ import java.util.UUID
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "remote_adb_settings")
 
 private const val DEFAULT_MANAGED_CF_BASE_DOMAIN = "676967.xyz"
-private const val DEFAULT_MANAGED_CF_API_URL = "https://api.676967.xyz/provision"
+private const val DEFAULT_MANAGED_CF_API_URL = "https://676967.xyz/provision"
 
 // Single provider - Cloudflare managed tunnels via 676967.xyz
 // Each device gets a unique hostname like abc123.676967.xyz

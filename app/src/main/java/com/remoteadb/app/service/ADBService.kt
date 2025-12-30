@@ -165,7 +165,7 @@ class ADBService : Service() {
             return internalFile
         }
         
-        // Try to extract from assets
+        // Try to extract from assets first
         try {
             assets.open("cloudflared").use { input ->
                 internalFile.outputStream().use { output ->
@@ -175,7 +175,21 @@ class ADBService : Service() {
             internalFile.setExecutable(true)
             return internalFile
         } catch (e: Exception) {
-            // Asset doesn't exist - would need to download
+            // Asset doesn't exist - download it
+        }
+        
+        // Download cloudflared binary for Android arm64
+        try {
+            val url = java.net.URL("https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64")
+            url.openStream().use { input ->
+                internalFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            internalFile.setExecutable(true)
+            return internalFile
+        } catch (e: Exception) {
+            android.util.Log.e("ADBService", "Failed to download cloudflared", e)
         }
         
         return null

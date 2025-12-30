@@ -51,8 +51,8 @@ fun OnboardingScreen(
         ),
         OnboardingPage(
             icon = Icons.Default.Security,
-            title = "Root Required",
-            description = "This app needs ROOT to enable ADB over TCP. Works with Magisk, KernelSU, or any root solution.",
+            title = "Root or Shizuku",
+            description = "Works with ROOT (Magisk/KernelSU) for full ADB, or with Shizuku for shell access without root!",
             gradient = listOf(GoldLight, GoldPrimary)
         ),
         OnboardingPage(

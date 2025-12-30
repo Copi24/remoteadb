@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Remote ADB Shell Client - For Shizuku mode (non-root)
-Connects to RemoteShellServer via WebSocket through Cloudflare tunnel.
+Connects to RemoteShellServer via TCP through Cloudflare tunnel.
 
 Usage:
   python radb.py DEVICE_ID [command]
@@ -10,7 +10,7 @@ Usage:
   python radb.py abc123 push local remote
   python radb.py abc123 pull remote local
 
-Requirements: pip install websocket-client
+Requirements: cloudflared (auto-downloads if missing)
 """
 
 import sys
@@ -18,21 +18,32 @@ import json
 import base64
 import subprocess
 import os
+import socket
+import threading
+import time
 
-def install_deps():
-    """Auto-install websocket-client if missing."""
-    try:
-        import websocket
-        return websocket
-    except ImportError:
-        print("Installing websocket-client...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "websocket-client", "-q"])
-        import websocket
-        return websocket
+class SocketWrapper:
+    """Wrapper to make socket work like websocket with send/recv for JSON lines."""
+    def __init__(self, sock):
+        self.sock = sock
+        self.buffer = ""
+    
+    def send(self, data):
+        self.sock.sendall((data + "\n").encode())
+    
+    def recv(self):
+        while "\n" not in self.buffer:
+            chunk = self.sock.recv(4096).decode()
+            if not chunk:
+                raise ConnectionError("Connection closed")
+            self.buffer += chunk
+        line, self.buffer = self.buffer.split("\n", 1)
+        return line
+    
+    def close(self):
+        self.sock.close()
 
 def main():
-    websocket = install_deps()
-    
     if len(sys.argv) < 2:
         print("Remote ADB Shell Client")
         print("Usage:")
@@ -46,43 +57,50 @@ def main():
     device_id = sys.argv[1]
     hostname = f"{device_id}.676967.xyz"
     
-    # Check if cloudflared is available and start tunnel
     print(f"Connecting to {hostname}...")
     
-    # For Shizuku mode, we connect directly to the WebSocket server
-    # The tunnel exposes port 5556 (RemoteShellServer)
-    ws_url = f"wss://{hostname}:5556"
+    # Use cloudflared to tunnel TCP connection
+    tunnel_port = 15555
     
     try:
-        # Try direct WebSocket first (if tunnel supports it)
-        ws = websocket.create_connection(ws_url, timeout=10)
-    except:
-        # Fall back to using cloudflared access
-        print("Direct connection failed, using cloudflared tunnel...")
-        print("Note: For Shizuku mode, ensure the tunnel is configured for port 5556")
-        
-        # Start cloudflared in background
-        tunnel_port = 15556
-        import threading
-        import time
-        
+        # Start cloudflared in background to tunnel TCP
         def run_cloudflared():
-            subprocess.run([
-                "cloudflared", "access", "tcp",
-                "--hostname", hostname,
-                "--url", f"localhost:{tunnel_port}"
-            ], capture_output=True)
+            try:
+                subprocess.run([
+                    "cloudflared", "access", "tcp",
+                    "--hostname", hostname,
+                    "--url", f"localhost:{tunnel_port}"
+                ], capture_output=True)
+            except Exception as e:
+                print(f"Cloudflared error: {e}")
         
         t = threading.Thread(target=run_cloudflared, daemon=True)
         t.start()
-        time.sleep(2)  # Wait for tunnel
+        time.sleep(3)  # Wait for tunnel to establish
         
-        ws = websocket.create_connection(f"ws://localhost:{tunnel_port}", timeout=10)
-    
-    print("Connected!")
+        # Connect via plain TCP (JSON line protocol)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(("localhost", tunnel_port))
+        sock.settimeout(30)
+        
+        ws = SocketWrapper(sock)
+        
+        # Read welcome message
+        try:
+            welcome = ws.recv()
+            msg = json.loads(welcome)
+            if msg.get("type") == "welcome":
+                print(f"Connected! Mode: {msg.get('mode', 'unknown')}")
+        except:
+            pass
+        
+    except Exception as e:
+        print(f"Connection failed: {e}")
+        print("Make sure cloudflared is installed:")
+        print("  https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/")
+        sys.exit(1)
     
     if len(sys.argv) == 2 or sys.argv[2] == "shell":
-        # Interactive shell
         interactive_shell(ws)
     elif sys.argv[2] == "push" and len(sys.argv) >= 5:
         push_file(ws, sys.argv[3], sys.argv[4])
@@ -91,7 +109,6 @@ def main():
     elif sys.argv[2] == "logcat":
         stream_logcat(ws)
     else:
-        # Single command
         cmd = " ".join(sys.argv[2:])
         result = execute(ws, cmd)
         if result.get("stdout"):
@@ -110,7 +127,10 @@ def execute(ws, cmd):
 
 def interactive_shell(ws):
     """Run interactive shell session."""
-    import readline  # For better input handling on Unix
+    try:
+        import readline  # For better input handling on Unix
+    except ImportError:
+        pass  # Windows doesn't have readline
     
     print("Remote ADB Shell (Shizuku mode)")
     print("Type 'exit' to quit\n")
@@ -149,10 +169,10 @@ def push_file(ws, local_path, remote_path):
     }))
     
     response = json.loads(ws.recv())
-    if response.get("type") == "ok":
+    if response.get("success") or response.get("type") == "ok":
         print(f"Pushed {local_path} -> {remote_path}")
     else:
-        print(f"Error: {response.get('message', 'Unknown error')}")
+        print(f"Error: {response.get('error', response.get('message', 'Unknown error'))}")
         sys.exit(1)
 
 def pull_file(ws, remote_path, local_path):
@@ -163,13 +183,18 @@ def pull_file(ws, remote_path, local_path):
     }))
     
     response = json.loads(ws.recv())
-    if response.get("type") == "file":
+    if response.get("success") and response.get("data"):
+        data = base64.b64decode(response["data"])
+        with open(local_path, "wb") as f:
+            f.write(data)
+        print(f"Pulled {remote_path} -> {local_path}")
+    elif response.get("type") == "file":
         data = base64.b64decode(response["data"])
         with open(local_path, "wb") as f:
             f.write(data)
         print(f"Pulled {remote_path} -> {local_path}")
     else:
-        print(f"Error: {response.get('message', 'Unknown error')}")
+        print(f"Error: {response.get('error', response.get('message', 'Unknown error'))}")
         sys.exit(1)
 
 def stream_logcat(ws):
@@ -187,7 +212,6 @@ def stream_logcat(ws):
             if response.get("type") == "line":
                 print(response.get("text", ""))
             elif response.get("type") == "output":
-                # Full output returned
                 print(response.get("stdout", ""), end="")
                 break
     except KeyboardInterrupt:
