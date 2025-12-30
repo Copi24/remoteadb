@@ -111,17 +111,18 @@ def main():
     else:
         cmd = " ".join(sys.argv[2:])
         result = execute(ws, cmd)
-        if result.get("stdout"):
-            print(result["stdout"], end="")
+        # Server returns: {success, output, stderr, exitCode}
+        if result.get("output"):
+            print(result["output"], end="")
         if result.get("stderr"):
             print(result["stderr"], end="", file=sys.stderr)
-        sys.exit(result.get("exit", 0))
+        sys.exit(result.get("exitCode", 0))
     
     ws.close()
 
 def execute(ws, cmd):
     """Execute a single command and return result."""
-    ws.send(json.dumps({"type": "shell", "cmd": cmd}))
+    ws.send(json.dumps({"type": "shell", "command": cmd}))
     response = ws.recv()
     return json.loads(response)
 
@@ -144,8 +145,8 @@ def interactive_shell(ws):
                 continue
             
             result = execute(ws, cmd)
-            if result.get("stdout"):
-                print(result["stdout"], end="")
+            if result.get("output"):
+                print(result["output"], end="")
             if result.get("stderr"):
                 print(result["stderr"], end="")
         except KeyboardInterrupt:
@@ -202,18 +203,14 @@ def stream_logcat(ws):
     print("Streaming logcat (Ctrl+C to stop)...\n")
     
     ws.send(json.dumps({
-        "type": "stream",
-        "cmd": "logcat -v time"
+        "type": "shell",
+        "command": "logcat -v time"
     }))
     
     try:
-        while True:
-            response = json.loads(ws.recv())
-            if response.get("type") == "line":
-                print(response.get("text", ""))
-            elif response.get("type") == "output":
-                print(response.get("stdout", ""), end="")
-                break
+        response = json.loads(ws.recv())
+        if response.get("output"):
+            print(response.get("output", ""), end="")
     except KeyboardInterrupt:
         print("\nStopped")
 

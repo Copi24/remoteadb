@@ -430,7 +430,7 @@ private fun ConnectionInfoCard(
             Spacer(modifier = Modifier.height(12.dp))
             
             Text(
-                text = "Connect from anywhere: adb connect $tunnelUrl:$port",
+                text = "Uses cloudflared on PC to connect",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextMuted
             )

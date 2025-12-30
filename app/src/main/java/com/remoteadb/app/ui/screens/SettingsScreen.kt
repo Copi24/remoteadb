@@ -177,7 +177,7 @@ fun SettingsScreen(
                     SettingsInfoItem(
                         icon = Icons.Outlined.Info,
                         title = "Version",
-                        value = "2.0.0"
+                        value = "1.0.0"
                     )
                     
                     GoldDivider(modifier = Modifier.padding(vertical = 12.dp))
