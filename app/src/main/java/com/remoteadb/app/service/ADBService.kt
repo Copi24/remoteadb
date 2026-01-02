@@ -15,6 +15,7 @@ import com.remoteadb.app.MainActivity
 import com.remoteadb.app.R
 import com.remoteadb.app.shizuku.ShizukuManager
 import com.remoteadb.app.shizuku.ShizukuRemoteServer
+import com.remoteadb.app.utils.ShellExecutor
 import com.remoteadb.app.utils.ADBManager
 import com.remoteadb.app.utils.ExecutionMode
 import com.remoteadb.app.utils.ManagedCloudflareProvisioner
@@ -208,49 +209,39 @@ class ADBService : Service() {
     }
     
     private fun getOrDownloadCloudflared(): java.io.File? {
-        // Most reliable on modern Android: execute from nativeLibraryDir (exec mount).
-        val nativeFile = runCatching {
-            java.io.File(applicationInfo.nativeLibraryDir, "libcloudflared.so")
-        }.getOrNull()
-        if (nativeFile != null && nativeFile.exists() && nativeFile.canExecute()) {
-            return nativeFile
+        // Android 15/16 often mount app-private dirs as noexec, so we install to /data/local/tmp
+        // using ROOT or Shizuku (shell) privileges.
+        val tmpPath = "/data/local/tmp/remoteadb_cloudflared"
+
+        val tmpFile = java.io.File(tmpPath)
+        if (tmpFile.exists() && tmpFile.canExecute()) {
+            return tmpFile
         }
 
-        // Fallback (older builds): extract from assets into codeCacheDir.
-        val internalFile = java.io.File(codeCacheDir, "cloudflared")
-        if (internalFile.exists() && internalFile.canExecute()) {
-            return internalFile
-        }
-
-        return try {
-            assets.open("cloudflared").use { input ->
-                internalFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-
-            runCatching {
-                android.system.Os.chmod(internalFile.absolutePath, 0b111_101_101) // 0755
-            }
-            runCatching {
-                Runtime.getRuntime()
-                    .exec(arrayOf("chmod", "755", internalFile.absolutePath))
-                    .waitFor()
-            }
-            internalFile.setReadable(true, false)
-            internalFile.setWritable(true, true)
-            internalFile.setExecutable(true, false)
-
-            if (!internalFile.canExecute()) {
-                android.util.Log.e("ADBService", "cloudflared is not executable after chmod")
-                return null
-            }
-
-            internalFile
+        val bytes = try {
+            assets.open("cloudflared").use { it.readBytes() }
         } catch (e: Exception) {
             android.util.Log.e("ADBService", "Missing cloudflared asset", e)
-            null
+            return null
         }
+
+        val installed = when (activeMode) {
+            ExecutionMode.ROOT -> {
+                val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                ShellExecutor.executeAsRoot("echo '$b64' | base64 -d > $tmpPath && chmod 755 $tmpPath").success
+            }
+            ExecutionMode.SHIZUKU -> {
+                val ok = ShizukuManager.writeFile(tmpPath, bytes)
+                if (ok) {
+                    ShizukuManager.executeCommand("chmod 755 $tmpPath").exitCode == 0
+                } else {
+                    false
+                }
+            }
+            else -> false
+        }
+
+        return if (installed && tmpFile.exists() && tmpFile.canExecute()) tmpFile else null
     }
     
     private fun stopAdbTunnel() {

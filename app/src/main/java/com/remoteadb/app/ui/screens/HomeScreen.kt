@@ -835,7 +835,7 @@ private fun DiagnosticsCard(
             }
 
             val cloudflared = listOf(
-                diagCloudflared(java.io.File(context.applicationInfo.nativeLibraryDir, "libcloudflared.so")),
+                diagCloudflared(java.io.File("/data/local/tmp/remoteadb_cloudflared")),
                 diagCloudflared(java.io.File(context.codeCacheDir, "cloudflared")),
                 diagCloudflared(java.io.File(context.filesDir, "cloudflared"))
             )
