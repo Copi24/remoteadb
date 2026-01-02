@@ -127,6 +127,8 @@ fun HomeScreen(
             MainStatusCard(
                 serviceState = serviceState,
                 tunnelUrl = tunnelUrl,
+                deviceId = deviceId,
+                executionMode = executionMode,
                 isConnected = isConnected,
                 isLoading = isLoading,
                 canConnect = canConnect,
@@ -320,6 +322,8 @@ private fun TopBar(onSettingsClick: () -> Unit) {
 private fun MainStatusCard(
     serviceState: ServiceState,
     tunnelUrl: String?,
+    deviceId: String,
+    executionMode: ExecutionMode,
     isConnected: Boolean,
     isLoading: Boolean,
     canConnect: Boolean,
