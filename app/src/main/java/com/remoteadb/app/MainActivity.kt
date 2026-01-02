@@ -63,6 +63,18 @@ class MainActivity : ComponentActivity() {
         
         settingsRepository = SettingsRepository(this)
         
+        // If we crashed last run, surface it via Settings (so it shows in UI).
+        runCatching {
+            val prefs = getSharedPreferences("remote_adb_crash", MODE_PRIVATE)
+            val crash = prefs.getString("last_crash", "").orEmpty()
+            if (crash.isNotBlank()) {
+                prefs.edit().remove("last_crash").apply()
+                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    settingsRepository.setLastError("App crashed last run:\n" + crash.take(800))
+                }
+            }
+        }
+
         // Initialize Shizuku manager
         val appInfo = packageManager.getPackageInfo(packageName, 0)
         val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
