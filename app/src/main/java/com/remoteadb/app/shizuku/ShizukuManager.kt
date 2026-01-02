@@ -106,10 +106,27 @@ object ShizukuManager {
     fun init(packageName: String, versionCode: Int) {
         this.packageName = packageName
         this.versionCode = versionCode
-        
+
         Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
         Shizuku.addBinderDeadListener(binderDeadListener)
         Shizuku.addRequestPermissionResultListener(permissionResultListener)
+
+        // Ensure state is updated immediately; some devices never trigger the sticky listener.
+        refreshState()
+    }
+
+    private fun refreshState() {
+        try {
+            if (!Shizuku.pingBinder()) {
+                _state.value = ShizukuState.NotRunning
+                _isAvailable.value = false
+                return
+            }
+            checkPermission()
+        } catch (e: Throwable) {
+            _state.value = ShizukuState.NotInstalled
+            _isAvailable.value = false
+        }
     }
     
     fun destroy() {
@@ -138,13 +155,20 @@ object ShizukuManager {
             else -> {
                 Log.i(TAG, "Requesting permission")
                 _state.value = ShizukuState.NoPermission
+                runCatching {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        runCatching { Shizuku.requestPermission(0) }
+                    }
+                }
             }
         }
     }
     
     fun requestPermission() {
         if (Shizuku.pingBinder()) {
-            Shizuku.requestPermission(0)
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                Shizuku.requestPermission(0)
+            }
         } else {
             _state.value = ShizukuState.NotRunning
         }

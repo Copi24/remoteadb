@@ -121,6 +121,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
     var onboardingCompleted by remember { mutableStateOf<Boolean?>(null) }
     var adbPort by remember { mutableStateOf("5555") }
     var autoStartOnBoot by remember { mutableStateOf(false) }
+    var managedCfDeviceId by remember { mutableStateOf("") }
     var managedCfHostname by remember { mutableStateOf("") }
     var managedCfRunToken by remember { mutableStateOf("") }
     var deviceInfo by remember { mutableStateOf<DeviceInfo?>(null) }
@@ -139,6 +140,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
         onboardingCompleted = settingsRepository.onboardingCompleted.first()
         adbPort = settingsRepository.adbPort.first()
         autoStartOnBoot = settingsRepository.autoStartOnBoot.first()
+        managedCfDeviceId = settingsRepository.getOrCreateManagedDeviceId()
         managedCfHostname = settingsRepository.managedCfHostname.first()
         managedCfRunToken = settingsRepository.managedCfRunToken.first()
         tunnelUrl = settingsRepository.lastTunnelUrl.first().takeIf { it.isNotEmpty() }
@@ -217,6 +219,7 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
             HomeScreen(
                 serviceState = serviceState,
                 tunnelUrl = tunnelUrl,
+                deviceId = managedCfDeviceId,
                 deviceInfo = deviceInfo,
                 localIp = localIp,
                 adbPort = adbPort,
@@ -225,7 +228,13 @@ fun RemoteADBApp(settingsRepository: SettingsRepository) {
                 onRequestShizukuPermission = {
                     ShizukuManager.requestPermission()
                 },
-                onToggleService = {
+                onToggleService = toggle@{
+                    if (executionMode == ExecutionMode.NONE) {
+                        if (shizukuState is ShizukuManager.ShizukuState.NoPermission) {
+                            ShizukuManager.requestPermission()
+                        }
+                        return@toggle
+                    }
                     if (serviceState is ServiceState.Running) {
                         ADBService.stopService(context)
                         serviceState = ServiceState.Stopping

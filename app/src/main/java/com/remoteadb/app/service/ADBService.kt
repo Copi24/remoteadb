@@ -13,7 +13,10 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.remoteadb.app.MainActivity
 import com.remoteadb.app.R
+import com.remoteadb.app.shizuku.ShizukuManager
+import com.remoteadb.app.shizuku.ShizukuRemoteServer
 import com.remoteadb.app.utils.ADBManager
+import com.remoteadb.app.utils.ExecutionMode
 import com.remoteadb.app.utils.ManagedCloudflareProvisioner
 import com.remoteadb.app.utils.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +34,8 @@ class ADBService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var settingsRepository: SettingsRepository
     private var cloudflaredProcess: Process? = null
+    private var shizukuServer: ShizukuRemoteServer? = null
+    private var activeMode: ExecutionMode = ExecutionMode.NONE
     
     private val _serviceState = MutableStateFlow<ServiceState>(ServiceState.Stopped)
     val serviceState: StateFlow<ServiceState> = _serviceState
@@ -74,21 +79,55 @@ class ADBService : Service() {
             startForeground(NOTIFICATION_ID, createNotification("Starting ADB tunnel..."))
             
             val port = settingsRepository.adbPort.first().toIntOrNull() ?: 5555
-            
-            // Enable TCP ADB
-            updateNotification("Enabling ADB over TCP...")
-            val adbResult = ADBManager.enableTcpAdb(port)
-            if (!adbResult.success) {
-                val msg = adbResult.error ?: "Failed to enable ADB over TCP"
-                settingsRepository.setLastError(msg)
-                _serviceState.value = ServiceState.Error(msg)
-                stopSelf()
-                return@launch
+
+            activeMode = ADBManager.detectExecutionMode()
+            when (activeMode) {
+                ExecutionMode.ROOT -> {
+                    // Enable TCP ADB
+                    updateNotification("Enabling ADB over TCP...")
+                    val adbResult = ADBManager.enableTcpAdb(port)
+                    if (!adbResult.success) {
+                        val msg = adbResult.error ?: "Failed to enable ADB over TCP"
+                        settingsRepository.setLastError(msg)
+                        _serviceState.value = ServiceState.Error(msg)
+                        stopSelf()
+                        return@launch
+                    }
+                    // Small delay to ensure ADB is ready
+                    kotlinx.coroutines.delay(1000)
+                }
+
+                ExecutionMode.SHIZUKU -> {
+                    // Shizuku cannot enable adbd TCP on production builds reliably.
+                    // Instead, expose our own small TCP server through the tunnel.
+                    if (!ShizukuManager.isAvailable.value) {
+                        val msg = "Shizuku not ready. Open Shizuku and grant permission."
+                        settingsRepository.setLastError(msg)
+                        _serviceState.value = ServiceState.Error(msg)
+                        stopSelf()
+                        return@launch
+                    }
+                    updateNotification("Starting Shizuku remote server...")
+                    shizukuServer = ShizukuRemoteServer(port)
+                    if (shizukuServer?.start() != true) {
+                        val msg = "Failed to start Shizuku server on port $port"
+                        settingsRepository.setLastError(msg)
+                        _serviceState.value = ServiceState.Error(msg)
+                        stopSelf()
+                        return@launch
+                    }
+                    kotlinx.coroutines.delay(300)
+                }
+
+                ExecutionMode.NONE -> {
+                    val msg = "No elevated access available. Grant ROOT or Shizuku permission."
+                    settingsRepository.setLastError(msg)
+                    _serviceState.value = ServiceState.Error(msg)
+                    stopSelf()
+                    return@launch
+                }
             }
-            
-            // Small delay to ensure ADB is ready
-            kotlinx.coroutines.delay(1000)
-            
+
             // Provision hostname via Cloudflare Worker
             updateNotification("Provisioning tunnel...")
             val apiUrl = settingsRepository.getApiUrl()
@@ -147,7 +186,7 @@ class ADBService : Service() {
                     "run",
                     "--token", token
                 )
-                processBuilder.directory(filesDir)
+                processBuilder.directory(cloudflaredFile.parentFile)
                 processBuilder.redirectErrorStream(true)
                 
                 cloudflaredProcess = processBuilder.start()
@@ -168,35 +207,44 @@ class ADBService : Service() {
     }
     
     private fun getOrDownloadCloudflared(): java.io.File? {
-        val internalFile = java.io.File(filesDir, "cloudflared")
+        // Most reliable on modern Android: execute from nativeLibraryDir (exec mount).
+        val nativeFile = runCatching {
+            java.io.File(applicationInfo.nativeLibraryDir, "libcloudflared.so")
+        }.getOrNull()
+        if (nativeFile != null && nativeFile.exists() && nativeFile.canExecute()) {
+            return nativeFile
+        }
+
+        // Fallback (older builds): extract from assets into codeCacheDir.
+        val internalFile = java.io.File(codeCacheDir, "cloudflared")
         if (internalFile.exists() && internalFile.canExecute()) {
             return internalFile
         }
-        
-        // Extract from assets (we ship an Android-compatible cloudflared binary)
+
         return try {
             assets.open("cloudflared").use { input ->
                 internalFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
-            // Try Java setExecutable first
-            if (!internalFile.setExecutable(true, false)) {
-                android.util.Log.w("ADBService", "Java setExecutable failed, trying chmod")
+
+            runCatching {
+                android.system.Os.chmod(internalFile.absolutePath, 0b111_101_101) // 0755
             }
-            // Also use chmod via shell as fallback (works better on some devices)
-            try {
-                val chmod = Runtime.getRuntime().exec(arrayOf("chmod", "755", internalFile.absolutePath))
-                chmod.waitFor()
-            } catch (e: Exception) {
-                android.util.Log.w("ADBService", "chmod fallback failed", e)
+            runCatching {
+                Runtime.getRuntime()
+                    .exec(arrayOf("chmod", "755", internalFile.absolutePath))
+                    .waitFor()
             }
-            
+            internalFile.setReadable(true, false)
+            internalFile.setWritable(true, true)
+            internalFile.setExecutable(true, false)
+
             if (!internalFile.canExecute()) {
                 android.util.Log.e("ADBService", "cloudflared is not executable after chmod")
                 return null
             }
-            
+
             internalFile
         } catch (e: Exception) {
             android.util.Log.e("ADBService", "Missing cloudflared asset", e)
@@ -210,7 +258,12 @@ class ADBService : Service() {
             
             cloudflaredProcess?.destroy()
             cloudflaredProcess = null
-            ADBManager.disableTcpAdb()
+            shizukuServer?.stop()
+            shizukuServer = null
+            if (activeMode == ExecutionMode.ROOT) {
+                ADBManager.disableTcpAdb()
+            }
+            activeMode = ExecutionMode.NONE
 
             settingsRepository.setLastTunnelUrl("")
             settingsRepository.setLastError("")

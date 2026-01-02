@@ -42,11 +42,16 @@ import com.remoteadb.app.ui.components.*
 import com.remoteadb.app.ui.theme.*
 import com.remoteadb.app.utils.DeviceInfo
 import com.remoteadb.app.utils.ExecutionMode
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import rikka.shizuku.Shizuku
 
 @Composable
 fun HomeScreen(
     serviceState: ServiceState,
     tunnelUrl: String?,
+    deviceId: String,
     deviceInfo: DeviceInfo?,
     localIp: String?,
     adbPort: String,
@@ -61,7 +66,8 @@ fun HomeScreen(
     
     val isConnected = serviceState is ServiceState.Running
     val isLoading = serviceState is ServiceState.Starting || serviceState is ServiceState.Stopping
-    val canConnect = executionMode != ExecutionMode.NONE
+    // Allow the button to trigger Shizuku permission request even before we have executionMode.
+    val canConnect = executionMode != ExecutionMode.NONE || shizukuState is ShizukuManager.ShizukuState.NoPermission
     
     Box(
         modifier = Modifier
@@ -147,6 +153,7 @@ fun HomeScreen(
             // Device info card
             deviceInfo?.let {
                 DeviceInfoCard(
+                    deviceId = deviceId,
                     deviceInfo = it, 
                     executionMode = executionMode,
                     shizukuState = shizukuState
@@ -155,7 +162,15 @@ fun HomeScreen(
             }
             
             // Quick actions card
-            QuickActionsCard()
+            QuickActionsCard(executionMode = executionMode)
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            DiagnosticsCard(
+                serviceState = serviceState,
+                executionMode = executionMode,
+                shizukuState = shizukuState
+            )
             
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -486,23 +501,49 @@ private fun MainStatusCard(
                                     color = TextMuted
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "curl -sL 676967.xyz/c | bash -s ${url.substringBefore(".")}",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp
-                                    ),
-                                    color = GoldLight
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "adb connect localhost:5555",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp
-                                    ),
-                                    color = GoldLight
-                                )
+                                when (executionMode) {
+                                    ExecutionMode.ROOT -> {
+                                        Text(
+                                            text = "curl -sL 676967.xyz/c | bash -s $deviceId",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp
+                                            ),
+                                            color = GoldLight
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "adb connect localhost:5555",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp
+                                            ),
+                                            color = GoldLight
+                                        )
+                                    }
+
+                                    ExecutionMode.SHIZUKU -> {
+                                        Text(
+                                            text = "curl -sLO 676967.xyz/radb.py",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp
+                                            ),
+                                            color = GoldLight
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "python radb.py $deviceId shell",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp
+                                            ),
+                                            color = GoldLight
+                                        )
+                                    }
+
+                                    else -> {}
+                                }
                             }
                         }
                     }
@@ -578,6 +619,7 @@ private fun ConnectionInfoCard(
 
 @Composable
 private fun DeviceInfoCard(
+    deviceId: String,
     deviceInfo: DeviceInfo,
     executionMode: ExecutionMode,
     shizukuState: ShizukuManager.ShizukuState
@@ -597,7 +639,15 @@ private fun DeviceInfoCard(
             label = "Model",
             value = deviceInfo.model
         )
-        
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        InfoRow(
+            icon = Icons.Outlined.Fingerprint,
+            label = "Device ID",
+            value = deviceId
+        )
+
         Spacer(modifier = Modifier.height(12.dp))
         
         InfoRow(
@@ -635,7 +685,7 @@ private fun DeviceInfoCard(
 }
 
 @Composable
-private fun QuickActionsCard() {
+private fun QuickActionsCard(executionMode: ExecutionMode) {
     GlowingCard(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "How to Connect",
@@ -648,9 +698,19 @@ private fun QuickActionsCard() {
         
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             StepItem(number = 1, text = "Tap 'Connect' on your phone")
-            StepItem(number = 2, text = "On your PC: run the curl command shown above")
-            StepItem(number = 3, text = "Then: adb connect localhost:5555")
-            StepItem(number = 4, text = "Keep the tunnel running (Ctrl+C to stop)")
+            StepItem(number = 2, text = "On your PC: run the command shown above")
+            when (executionMode) {
+                ExecutionMode.ROOT -> {
+                    StepItem(number = 3, text = "Then: adb connect localhost:5555")
+                }
+                ExecutionMode.SHIZUKU -> {
+                    StepItem(number = 3, text = "Then: python radb.py DEVICE_ID shell")
+                }
+                ExecutionMode.NONE -> {
+                    StepItem(number = 3, text = "Grant ROOT or Shizuku permission first")
+                }
+            }
+            StepItem(number = 4, text = "Keep the PC tunnel running (Ctrl+C to stop)")
         }
     }
 }
@@ -685,6 +745,203 @@ private fun InfoRow(
                 color = valueColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticsCard(
+    serviceState: ServiceState,
+    executionMode: ExecutionMode,
+    shizukuState: ShizukuManager.ShizukuState
+) {
+    val context = LocalContext.current
+
+    data class CloudflaredDiag(
+        val path: String,
+        val exists: Boolean,
+        val sizeBytes: Long,
+        val canExecute: Boolean,
+        val modeOctal: String,
+        val execTest: String
+    )
+
+    data class Diag(
+        val shizukuPing: String,
+        val shizukuPermission: String,
+        val shizukuId: String,
+        val cloudflared: List<CloudflaredDiag>
+    )
+
+    var diag by remember { mutableStateOf<Diag?>(null) }
+
+    LaunchedEffect(Unit) {
+        diag = withContext(Dispatchers.IO) {
+            val shizukuPing = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+            val shizukuPerm = runCatching { Shizuku.checkSelfPermission() }
+                .map {
+                    if (it == android.content.pm.PackageManager.PERMISSION_GRANTED) "GRANTED" else "DENIED($it)"
+                }
+                .getOrElse { "ERROR(${it.javaClass.simpleName}: ${it.message})" }
+
+            val shizukuId = runCatching {
+                if (shizukuState is ShizukuManager.ShizukuState.Ready) {
+                    val id = ShizukuManager.executeCommand("id").stdout.trim().lineSequence().firstOrNull().orEmpty()
+                    if (id.isNotBlank()) id else "(empty)"
+                } else {
+                    "(not ready)"
+                }
+            }.getOrElse { "ERROR(${it.javaClass.simpleName}: ${it.message})" }
+
+            fun diagCloudflared(file: java.io.File): CloudflaredDiag {
+                val exists = file.exists()
+                val size = runCatching { file.length() }.getOrDefault(0)
+                val canExec = runCatching { file.canExecute() }.getOrDefault(false)
+                val modeOctal = runCatching {
+                    val mode = android.system.Os.stat(file.absolutePath).st_mode and 0x1FF
+                    "0" + Integer.toOctalString(mode)
+                }.getOrElse { "ERR" }
+
+                val execTest = if (!exists) {
+                    "missing"
+                } else {
+                    runCatching {
+                        val p = ProcessBuilder(file.absolutePath, "--version")
+                            .redirectErrorStream(true)
+                            .start()
+                        val finished = p.waitFor(2, TimeUnit.SECONDS)
+                        if (!finished) {
+                            p.destroy()
+                            return@runCatching "timeout"
+                        }
+                        val out = p.inputStream.bufferedReader().readText().trim()
+                        if (out.isNotBlank()) out.lineSequence().first() else "exit=${p.exitValue()}"
+                    }.getOrElse { "ERROR(${it.javaClass.simpleName}: ${it.message})" }
+                }
+
+                return CloudflaredDiag(
+                    path = file.absolutePath,
+                    exists = exists,
+                    sizeBytes = size,
+                    canExecute = canExec,
+                    modeOctal = modeOctal,
+                    execTest = execTest.take(120)
+                )
+            }
+
+            val cloudflared = listOf(
+                diagCloudflared(java.io.File(context.applicationInfo.nativeLibraryDir, "libcloudflared.so")),
+                diagCloudflared(java.io.File(context.codeCacheDir, "cloudflared")),
+                diagCloudflared(java.io.File(context.filesDir, "cloudflared"))
+            )
+
+            Diag(
+                shizukuPing = shizukuPing.toString(),
+                shizukuPermission = shizukuPerm,
+                shizukuId = shizukuId,
+                cloudflared = cloudflared
+            )
+        }
+    }
+
+    GlowingCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Diagnostics",
+            style = MaterialTheme.typography.titleMedium,
+            color = GoldPrimary,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        InfoRow(
+            icon = Icons.Outlined.Info,
+            label = "Service State",
+            value = when (serviceState) {
+                is ServiceState.Running -> "Running"
+                is ServiceState.Starting -> "Starting"
+                is ServiceState.Stopping -> "Stopping"
+                is ServiceState.Error -> "Error"
+                else -> "Stopped"
+            }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        InfoRow(
+            icon = Icons.Outlined.Security,
+            label = "Execution Mode",
+            value = executionMode.name
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        InfoRow(
+            icon = Icons.Outlined.Verified,
+            label = "Shizuku State",
+            value = shizukuState::class.simpleName ?: "Unknown"
+        )
+
+        diag?.let { d ->
+            Spacer(modifier = Modifier.height(12.dp))
+            InfoRow(
+                icon = Icons.Outlined.Link,
+                label = "Shizuku pingBinder",
+                value = d.shizukuPing
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            InfoRow(
+                icon = Icons.Outlined.Security,
+                label = "Shizuku Permission",
+                value = d.shizukuPermission
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            InfoRow(
+                icon = Icons.Outlined.Verified,
+                label = "Shizuku id",
+                value = d.shizukuId
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "cloudflared",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextMuted
+            )
+
+            d.cloudflared.forEach { c ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "${c.path}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 10.sp),
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "exists=${c.exists} size=${c.sizeBytes} canExec=${c.canExecute} mode=${c.modeOctal}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 10.sp),
+                    color = TextMuted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "exec: ${c.execTest}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 10.sp),
+                    color = GoldLight,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        } ?: run {
+            Text(
+                text = "Collecting diagnostics...",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextMuted
             )
         }
     }
