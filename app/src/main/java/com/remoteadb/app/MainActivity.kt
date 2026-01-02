@@ -63,15 +63,14 @@ class MainActivity : ComponentActivity() {
         
         settingsRepository = SettingsRepository(this)
         
-        // If we crashed last run, surface it via Settings (so it shows in UI).
+        // If we crashed last run, show a minimal crash screen instead of crashing again.
         runCatching {
             val prefs = getSharedPreferences("remote_adb_crash", MODE_PRIVATE)
             val crash = prefs.getString("last_crash", "").orEmpty()
             if (crash.isNotBlank()) {
-                prefs.edit().remove("last_crash").apply()
-                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                    settingsRepository.setLastError("App crashed last run:\n" + crash.take(800))
-                }
+                startActivity(Intent(this, CrashActivity::class.java))
+                finish()
+                return
             }
         }
 
