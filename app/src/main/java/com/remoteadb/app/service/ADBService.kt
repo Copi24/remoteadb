@@ -178,11 +178,12 @@ class ADBService : Service() {
                     return@withContext "Could not get cloudflared binary"
                 }
                 
-                // Run: cloudflared tunnel run --token <token>
+                // Run: cloudflared --no-autoupdate tunnel run --token <token>
+                // (--no-autoupdate is a *global* flag; putting it after `tunnel` breaks on some versions)
                 val processBuilder = ProcessBuilder(
                     cloudflaredFile.absolutePath,
-                    "tunnel",
                     "--no-autoupdate",
+                    "tunnel",
                     "run",
                     "--token", token
                 )

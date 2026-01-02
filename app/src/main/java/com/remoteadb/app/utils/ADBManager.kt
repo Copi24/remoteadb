@@ -165,9 +165,10 @@ object ADBManager {
     
     suspend fun getLocalIpAddress(): String {
         val result = ShellExecutor.execute("ip route get 1 | awk '{print \$7;exit}'")
-        return result.output.trim().ifEmpty { 
+        val ip = result.output.trim().ifEmpty {
             ShellExecutor.execute("hostname -I | awk '{print \$1}'").output.trim()
         }
+        return ip
     }
 }
 
