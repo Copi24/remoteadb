@@ -14,6 +14,7 @@ class CrashActivity : Activity() {
         val prefs = getSharedPreferences("remote_adb_crash", MODE_PRIVATE)
         val crash = prefs.getString("last_crash", "").orEmpty()
 
+        // Normal path: no crash recorded -> launch the real app.
         if (crash.isBlank()) {
             startActivity(Intent(this, MainActivity::class.java))
             finish()

@@ -63,16 +63,7 @@ class MainActivity : ComponentActivity() {
         
         settingsRepository = SettingsRepository(this)
         
-        // If we crashed last run, show a minimal crash screen instead of crashing again.
-        runCatching {
-            val prefs = getSharedPreferences("remote_adb_crash", MODE_PRIVATE)
-            val crash = prefs.getString("last_crash", "").orEmpty()
-            if (crash.isNotBlank()) {
-                startActivity(Intent(this, CrashActivity::class.java))
-                finish()
-                return
-            }
-        }
+        // CrashActivity is the launcher now; MainActivity should not attempt crash routing.
 
         // Initialize Shizuku manager
         val appInfo = packageManager.getPackageInfo(packageName, 0)
