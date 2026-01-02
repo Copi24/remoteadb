@@ -64,6 +64,12 @@ class MainActivity : ComponentActivity() {
         settingsRepository = SettingsRepository(this)
         
         // CrashActivity is the launcher now; MainActivity should not attempt crash routing.
+        runCatching {
+            getSharedPreferences("remote_adb_crash", MODE_PRIVATE)
+                .edit()
+                .putBoolean("starting_main", false)
+                .apply()
+        }
 
         // Initialize Shizuku manager
         val appInfo = packageManager.getPackageInfo(packageName, 0)

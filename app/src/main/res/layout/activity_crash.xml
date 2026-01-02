@@ -28,10 +28,17 @@
     </ScrollView>
 
     <Button
-        android:id="@+id/clear"
+        android:id="@+id/open"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="Clear &amp; Open App" />
+        android:text="Open App" />
+
+    <Button
+        android:id="@+id/clear"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Clear crash info" />
 
 </LinearLayout>
