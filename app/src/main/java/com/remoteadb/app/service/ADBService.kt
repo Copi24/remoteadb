@@ -208,7 +208,7 @@ class ADBService : Service() {
         }
     }
     
-    private fun getOrDownloadCloudflared(): java.io.File? {
+    private suspend fun getOrDownloadCloudflared(): java.io.File? {
         // Android 15/16 often mount app-private dirs as noexec, so we install to /data/local/tmp
         // using ROOT or Shizuku (shell) privileges.
         val tmpPath = "/data/local/tmp/remoteadb_cloudflared"
